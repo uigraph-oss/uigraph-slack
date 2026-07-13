@@ -33,6 +33,7 @@
     "@slack/bolt": "^4.7.3",
     "ai": "^7.0.22",
     "consola": "^3.4.2",
+    "slackify-markdown": "^5.0.0",
     "zod": "^4.4.3"
   }
 }
