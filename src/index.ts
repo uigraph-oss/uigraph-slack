@@ -7,6 +7,10 @@ const app = new App({
   socketMode: true,
 })
 
+app.event('app_mention', async ({ say }) => {
+  await say("I'm alive!")
+})
+
 app.message('hello', async ({ message, say }) => {
   await say({
     blocks: [
