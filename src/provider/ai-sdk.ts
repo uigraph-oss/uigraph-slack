@@ -9,7 +9,7 @@ export async function resolveAiModel(): Promise<LanguageModel> {
 
   const provider = createOpenAICompatible({
     name: 'Custom AI Provider',
-    baseURL: env.AI_PROVIDER_API_URL,
+    baseURL: env.AI_PROVIDER_API_URL!,
     apiKey: env.AI_PROVIDER_API_KEY,
   })
 
