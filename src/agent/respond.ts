@@ -2,18 +2,18 @@ import { SLACK_BOT_SYSTEM_PROMPT } from '@/constants/system-prompt'
 import { logger } from '@/logger'
 import { getTools } from '@/mcp/client'
 import { aiModel } from '@/provider/ai-sdk'
-import { generateText, stepCountIs } from 'ai'
+import { generateText, stepCountIs, type ModelMessage } from 'ai'
 
-export async function answer(question: string): Promise<string> {
+export async function answer(messages: ModelMessage[]): Promise<string> {
   const log = logger.withTag('agent')
-  log.info(`Question: ${question}`)
+  log.info(`Answering thread with ${messages.length} message(s)`)
 
   const result = await generateText({
     model: aiModel,
     tools: getTools(),
     stopWhen: stepCountIs(6),
     system: SLACK_BOT_SYSTEM_PROMPT,
-    prompt: question,
+    messages,
   })
 
   for (const step of result.steps) {

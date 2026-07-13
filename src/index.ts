@@ -1,4 +1,5 @@
 import { App } from '@slack/bolt'
+import type { ModelMessage } from 'ai'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
@@ -10,14 +11,30 @@ const app = new App({
   socketMode: true,
 })
 
-app.event('app_mention', async ({ event, say }) => {
-  const question = event.text.replace(/<@[^>]+>/g, '').trim()
+app.event('app_mention', async ({ event, say, client, context }) => {
   const threadTs = event.thread_ts ?? event.ts
 
   logger.withTag('slack').info(`Mention from ${event.user} in ${event.channel}`)
 
   try {
-    const reply = await answer(question)
+    const thread = await client.conversations.replies({
+      channel: event.channel,
+      ts: threadTs,
+    })
+
+    const messages: ModelMessage[] = []
+    for (const message of thread.messages ?? []) {
+      const text = (message.text ?? '').replace(/<@[^>]+>/g, '').trim()
+      if (text === '') {
+        continue
+      }
+
+      const isBot =
+        message.bot_id !== undefined || message.user === context.botUserId
+      messages.push({ role: isBot ? 'assistant' : 'user', content: text })
+    }
+
+    const reply = await answer(messages)
     await say({ text: reply, thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in thread ${threadTs}`)
   } catch (error) {
