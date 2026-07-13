@@ -8,7 +8,7 @@ import { generateText, type ModelMessage } from 'ai'
 type WebClient = webApi.WebClient
 
 export const COMPACTION_FILENAME = 'compaction.md'
-export const COMPACTION_TOKEN_BUDGET = 12000
+export const COMPACTION_TOKEN_BUDGET = 2000
 
 export type SlackMessage = NonNullable<
   Awaited<ReturnType<WebClient['conversations']['replies']>>['messages']
