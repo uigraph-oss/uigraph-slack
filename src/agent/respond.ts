@@ -3,10 +3,13 @@ import { logger } from '@/logger'
 import { getTools } from '@/mcp/client'
 import { aiModel } from '@/provider/ai-sdk'
 import { generateText, stepCountIs, type ModelMessage } from 'ai'
+import { inspect } from 'node:util'
 
 export async function answer(messages: ModelMessage[]): Promise<string> {
   const log = logger.withTag('agent')
   log.info(`Answering thread with ${messages.length} message(s)`)
+
+  log.info(`Messages: ${inspect(messages, { depth: null })}`)
 
   const result = await generateText({
     model: aiModel,

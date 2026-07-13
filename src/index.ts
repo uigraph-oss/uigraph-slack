@@ -57,6 +57,16 @@ app.event('app_mention', async ({ event, say, client, context }) => {
         const response = await fetch(url, {
           headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
         })
+        const contentType = response.headers.get('content-type') ?? ''
+        if (!response.ok || !contentType.startsWith('image/')) {
+          logger
+            .withTag('slack')
+            .error(
+              `Image download failed for ${file.name}: status ${response.status}, content-type ${contentType}`
+            )
+          continue
+        }
+
         const data = new Uint8Array(await response.arrayBuffer())
         content.push({ type: 'file', data, mediaType: file.mimetype })
       }
