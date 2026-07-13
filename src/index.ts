@@ -74,8 +74,11 @@ async function answerThread(
   slackMessages: SlackMessage[],
   botUserId: string | undefined
 ): Promise<string> {
-  const messages = await buildMessages(slackMessages, botUserId)
-  return answer(messages.slice(-env.LLM_MESSAGES_LIMIT))
+  const messages = await buildMessages(
+    slackMessages.slice(-env.LLM_MESSAGES_LIMIT),
+    botUserId
+  )
+  return answer(messages)
 }
 
 app.event('app_mention', async ({ event, say, client, context }) => {
@@ -147,9 +150,11 @@ app.event('message', async ({ event, say, client, context }) => {
         channel: event.channel,
         limit: 20,
       })
-      const slackMessages = (history.messages ?? []).reverse()
+      const slackMessages = (history.messages ?? [])
+        .reverse()
+        .slice(-env.LLM_MESSAGES_LIMIT)
       const messages = await buildMessages(slackMessages, context.botUserId)
-      reply = await answer(messages.slice(-env.LLM_MESSAGES_LIMIT))
+      reply = await answer(messages)
     }
 
     await say({ text: reply, thread_ts: threadTs })
