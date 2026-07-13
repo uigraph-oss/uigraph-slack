@@ -1,4 +1,5 @@
 import { env } from '@/env'
+import { logger } from '@/logger'
 import { createMCPClient } from '@ai-sdk/mcp'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { ToolSet } from 'ai'
@@ -24,8 +25,18 @@ export async function initMcp(): Promise<ToolSet> {
     }
   )
 
+  logger
+    .withTag('mcp')
+    .info(`Connecting to MCP server at ${env.UIGRAPH_MCP_URL}`)
+
   mcpClient = await createMCPClient({ transport })
   uigraphTools = await mcpClient.tools()
+
+  logger
+    .withTag('mcp')
+    .success(
+      `Loaded ${Object.keys(uigraphTools).length} tools: ${Object.keys(uigraphTools).join(', ')}`
+    )
 
   return uigraphTools
 }
@@ -40,6 +51,7 @@ export function getTools(): ToolSet {
 
 export async function closeMcp(): Promise<void> {
   if (mcpClient) {
+    logger.withTag('mcp').info('Closing MCP client')
     await mcpClient.close()
   }
 }
