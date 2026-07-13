@@ -16,7 +16,7 @@ function stripWrappingEmphasis(cell: string): string {
     .trim()
 }
 
-export function formatForSlack(markdown: string): string {
+export function tablesToBullets(markdown: string): string {
   const lines = markdown.split('\n')
   const out: string[] = []
 
@@ -80,7 +80,13 @@ export function formatForSlack(markdown: string): string {
     i++
   }
 
-  return slackifyMarkdown(out.join('\n'))
-    .replace(/^[ \t]*\*\*\*[ \t]*$/gm, '')
-    .replace(/\n{3,}/g, '\n\n')
+  return out.join('\n')
+}
+
+export function rulesToBlankLines(text: string): string {
+  return text.replace(/^[ \t]*\*\*\*[ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n')
+}
+
+export function formatForSlack(markdown: string): string {
+  return rulesToBlankLines(slackifyMarkdown(tablesToBullets(markdown)))
 }
