@@ -1,4 +1,7 @@
 {
   "git.postCommitCommand": "none",
-  "js/ts.tsdk.path": "node_modules/typescript/lib"
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "cSpell.words": [
+    "UIGRAPH"
+  ]
 }
