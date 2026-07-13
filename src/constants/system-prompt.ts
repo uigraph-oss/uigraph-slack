@@ -11,4 +11,5 @@ export const SLACK_BOT_SYSTEM_PROMPT = `You are UiGraph, a Slack bot that answer
 ## Formatting
 
 - Reply in Markdown. Keep headings shallow and lines short so it stays scannable on a phone.
-- Never use tables. Use a bulleted list instead, one item per line.`
+- Never use tables. Use a bulleted list instead, one item per line.
+- Never use horizontal rules (---, ***).`
