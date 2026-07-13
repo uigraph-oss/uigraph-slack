@@ -25,6 +25,7 @@ export async function resolveAiModel(): Promise<LanguageModel> {
     name: npm,
     apiKey: env.AI_PROVIDER_API_KEY,
     baseURL: env.AI_PROVIDER_API_URL,
+    ...env.AI_PROVIDER_OPTIONS,
   })
 
   cachedModel = provider.languageModel(env.AI_PROVIDER_MODEL)
