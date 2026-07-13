@@ -1,4 +1,5 @@
 import { SLACK_BOT_SYSTEM_PROMPT } from '@/constants/system-prompt'
+import { env } from '@/env'
 import { logger } from '@/logger'
 import { getTools } from '@/mcp/client'
 import { aiModel } from '@/provider/ai-sdk'
@@ -14,7 +15,7 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
   const result = await generateText({
     model: aiModel,
     tools: getTools(),
-    stopWhen: stepCountIs(99),
+    stopWhen: stepCountIs(env.LLM_MAX_STEP),
     system: SLACK_BOT_SYSTEM_PROMPT,
     messages,
   })

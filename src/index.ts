@@ -1,10 +1,10 @@
 import { App } from '@slack/bolt'
 import type { ModelMessage, UserContent } from 'ai'
-import { THREAD_MESSAGE_WINDOW, type SlackMessage } from './agent/compaction'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
 import { closeMcp, initMcp } from './mcp/client'
+import type { SlackMessage } from './types'
 
 const app = new App({
   token: env.SLACK_BOT_TOKEN,
@@ -75,7 +75,7 @@ async function answerThread(
   botUserId: string | undefined
 ): Promise<string> {
   const messages = await buildMessages(slackMessages, botUserId)
-  return answer(messages.slice(-THREAD_MESSAGE_WINDOW))
+  return answer(messages.slice(-env.LLM_MESSAGES_LIMIT))
 }
 
 app.event('app_mention', async ({ event, say, client, context }) => {
@@ -149,7 +149,7 @@ app.event('message', async ({ event, say, client, context }) => {
       })
       const slackMessages = (history.messages ?? []).reverse()
       const messages = await buildMessages(slackMessages, context.botUserId)
-      reply = await answer(messages.slice(-THREAD_MESSAGE_WINDOW))
+      reply = await answer(messages.slice(-env.LLM_MESSAGES_LIMIT))
     }
 
     await say({ text: reply, thread_ts: threadTs })

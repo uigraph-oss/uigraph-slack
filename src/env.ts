@@ -14,6 +14,9 @@ const envSchema = z.object({
   AI_PROVIDER_URL: z.url(),
   AI_PROVIDER_MODEL: z.string(),
   AI_PROVIDER_API_KEY: z.string(),
+
+  LLM_MAX_STEP: z.coerce.number().default(25),
+  LLM_MESSAGES_LIMIT: z.coerce.number().default(25),
 })
 
 export const env = envSchema.parse(process.env)
