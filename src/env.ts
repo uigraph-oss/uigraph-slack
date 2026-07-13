@@ -8,6 +8,7 @@ const envSchema = z.object({
   UIGRAPH_API_URL: z.url(),
   UIGRAPH_MCP_URL: z.url(),
   UIGRAPH_ACCESS_TOKEN: z.string(),
+  UIGRAPH_ORG_ID: z.string().optional(),
 
   AI_PROVIDER_URL: z.url(),
   AI_PROVIDER_MODEL: z.string(),

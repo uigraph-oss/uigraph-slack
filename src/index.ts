@@ -1,5 +1,7 @@
 import { App } from '@slack/bolt'
+import { answer } from './agent/respond'
 import { env } from './env'
+import { closeMcp, initMcp } from './mcp/client'
 
 const app = new App({
   token: env.SLACK_BOT_TOKEN,
@@ -7,39 +9,34 @@ const app = new App({
   socketMode: true,
 })
 
-app.event('app_mention', async ({ say }) => {
-  await say("I'm alive!")
+app.event('app_mention', async ({ event, say }) => {
+  const question = event.text.replace(/<@[^>]+>/g, '').trim()
+  const threadTs = event.thread_ts ?? event.ts
+
+  try {
+    const reply = await answer(question)
+    await say({ text: reply, thread_ts: threadTs })
+  } catch (error) {
+    await say({
+      text: 'Sorry, I hit an error answering that.',
+      thread_ts: threadTs,
+    })
+    app.logger.error(error)
+  }
 })
 
-app.message('hello', async ({ message, say }) => {
-  await say({
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `Hey there <@${message.user}>!`,
-        },
-        accessory: {
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: 'Click Me',
-          },
-          action_id: 'button_click',
-        },
-      },
-    ],
-    text: `Hey there <@${message.user}>!`,
-  })
-})
+async function shutdown() {
+  await closeMcp()
+  process.exit(0)
+}
 
-app.action('button_click', async ({ body, ack, say }) => {
-  await ack()
-  await say(`<@${body.user.id}> clicked the button`)
-})
+process.on('SIGINT', () => void shutdown())
+process.on('SIGTERM', () => void shutdown())
 
 void (async () => {
+  const tools = await initMcp()
   await app.start(process.env.PORT || 3000)
-  app.logger.info('⚡️ Bolt app is running!')
+  app.logger.info(
+    `⚡️ Bolt app is running with ${Object.keys(tools).length} MCP tools loaded!`
+  )
 })()
