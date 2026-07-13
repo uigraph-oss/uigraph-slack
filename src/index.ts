@@ -1,1 +1,41 @@
-console.log('Hello, TypeScript 6.0.3 with ESNext module system and NodeJs resolution strategy! Targeting ES2022.');
+import { App } from '@slack/bolt'
+import { env } from './env'
+
+const app = new App({
+  token: env.SLACK_BOT_TOKEN,
+  appToken: env.SLACK_APP_TOKEN,
+  socketMode: true,
+})
+
+app.message('hello', async ({ message, say }) => {
+  await say({
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `Hey there <@${message.user}>!`,
+        },
+        accessory: {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: 'Click Me',
+          },
+          action_id: 'button_click',
+        },
+      },
+    ],
+    text: `Hey there <@${message.user}>!`,
+  })
+})
+
+app.action('button_click', async ({ body, ack, say }) => {
+  await ack()
+  await say(`<@${body.user.id}> clicked the button`)
+})
+
+void (async () => {
+  await app.start(process.env.PORT || 3000)
+  app.logger.info('⚡️ Bolt app is running!')
+})()
