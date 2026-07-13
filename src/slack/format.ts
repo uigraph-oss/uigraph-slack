@@ -84,7 +84,7 @@ export function tablesToBullets(markdown: string): string {
 }
 
 export function rulesToBlankLines(text: string): string {
-  return text.replace(/^[ \t]*\*\*\*[ \t]*$/gm, '').replace(/\n{3,}/g, '\n\n')
+  return text.replace(/^\*\*\*$\n?/gm, '').replace(/\n{4,}/g, '\n\n\n')
 }
 
 export function formatForSlack(markdown: string): string {

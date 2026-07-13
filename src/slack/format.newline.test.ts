@@ -1,35 +1,43 @@
 import { describe, expect, it } from 'vitest'
 import { rulesToBlankLines } from './format'
 
-describe('rulesToBlankLines — a *** rule line becomes one blank line', () => {
-  it('replaces *** between two sections with a single blank line', () => {
+describe('rulesToBlankLines — an exact *** line becomes two blank lines', () => {
+  it('replaces *** between two sections with two blank lines', () => {
     expect(rulesToBlankLines('Section A\n\n***\n\nSection B')).toBe(
-      'Section A\n\nSection B'
+      'Section A\n\n\nSection B'
     )
   })
 
-  it('replaces *** with leading spaces', () => {
+  it('does not replace *** with leading spaces', () => {
     expect(rulesToBlankLines('Section A\n\n   ***\n\nSection B')).toBe(
-      'Section A\n\nSection B'
+      'Section A\n\n   ***\n\nSection B'
     )
   })
 
-  it('replaces *** with trailing spaces', () => {
+  it('does not replace *** with trailing spaces', () => {
     expect(rulesToBlankLines('Section A\n\n***   \n\nSection B')).toBe(
-      'Section A\n\nSection B'
+      'Section A\n\n***   \n\nSection B'
     )
   })
 
-  it('collapses two stacked rules into a single blank line', () => {
-    expect(rulesToBlankLines('A\n\n***\n\n***\n\nB')).toBe('A\n\nB')
+  it('does not replace a line of four stars', () => {
+    expect(rulesToBlankLines('Section A\n\n****\n\nSection B')).toBe(
+      'Section A\n\n****\n\nSection B'
+    )
+  })
+
+  it('replaces two stacked rules', () => {
+    expect(rulesToBlankLines('A\n\n***\n\n***\n\nB')).toBe('A\n\n\nB')
   })
 
   it('handles three sections separated by rules', () => {
-    expect(rulesToBlankLines('A\n\n***\n\nB\n\n***\n\nC')).toBe('A\n\nB\n\nC')
+    expect(rulesToBlankLines('A\n\n***\n\nB\n\n***\n\nC')).toBe(
+      'A\n\n\nB\n\n\nC'
+    )
   })
 
   it('drops a leading rule', () => {
-    expect(rulesToBlankLines('***\n\nBody text.')).toBe('\n\nBody text.')
+    expect(rulesToBlankLines('***\n\nBody text.')).toBe('\nBody text.')
   })
 
   it('drops a trailing rule', () => {
@@ -48,8 +56,8 @@ describe('rulesToBlankLines — a *** rule line becomes one blank line', () => {
     )
   })
 
-  it('collapses any run of three or more newlines to one blank line', () => {
-    expect(rulesToBlankLines('A\n\n\n\nB')).toBe('A\n\nB')
+  it('caps a run of four or more newlines at two blank lines', () => {
+    expect(rulesToBlankLines('A\n\n\n\nB')).toBe('A\n\n\nB')
   })
 
   it('leaves a single blank line untouched', () => {
