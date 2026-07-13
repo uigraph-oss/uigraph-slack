@@ -2,7 +2,7 @@ import { SLACK_BOT_SYSTEM_PROMPT } from '@/constants/system-prompt'
 import { env } from '@/env'
 import { logger } from '@/logger'
 import { getTools } from '@/mcp/client'
-import { aiModel } from '@/provider/ai-sdk'
+import { resolveAiModel } from '@/provider/ai-sdk'
 import { generateText, stepCountIs, type ModelMessage } from 'ai'
 import { inspect } from 'node:util'
 
@@ -13,7 +13,7 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
   log.info(`Messages: ${inspect(messages, { depth: null })}`)
 
   const result = await generateText({
-    model: aiModel,
+    model: await resolveAiModel(),
     tools: getTools(),
     stopWhen: stepCountIs(env.LLM_MAX_STEP),
     system: SLACK_BOT_SYSTEM_PROMPT,

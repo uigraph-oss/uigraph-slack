@@ -2,20 +2,17 @@ import { env } from '@/env'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 
-const provider = createOpenAICompatible({
-  name: 'Custom AI Provider',
-  baseURL: env.AI_PROVIDER_URL,
-  apiKey: env.AI_PROVIDER_API_KEY,
-})
-
-export const aiModel: LanguageModel = provider(env.AI_PROVIDER_MODEL)
+let cachedModel: LanguageModel | null = null
 
 export async function resolveAiModel(): Promise<LanguageModel> {
+  if (cachedModel) return cachedModel
+
   const provider = createOpenAICompatible({
     name: 'Custom AI Provider',
-    baseURL: env.AI_PROVIDER_URL,
+    baseURL: env.AI_PROVIDER_API_URL,
     apiKey: env.AI_PROVIDER_API_KEY,
   })
 
-  return provider(env.AI_PROVIDER_MODEL)
+  cachedModel = provider(env.AI_PROVIDER_MODEL)
+  return cachedModel
 }

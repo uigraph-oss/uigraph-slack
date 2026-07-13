@@ -11,9 +11,10 @@ const envSchema = z.object({
   UIGRAPH_ORG_ID: z.string(),
   UIGRAPH_ACCESS_TOKEN: z.string(),
 
-  AI_PROVIDER_URL: z.url(),
-  AI_PROVIDER_MODEL: z.string(),
+  AI_PROVIDER_NPM: z.string().default('@ai-sdk/openai-compatible'),
+  AI_PROVIDER_API_URL: z.url(),
   AI_PROVIDER_API_KEY: z.string(),
+  AI_PROVIDER_MODEL: z.string(),
 
   LLM_MAX_STEP: z.coerce.number().default(25),
   LLM_MESSAGES_LIMIT: z.coerce.number().default(25),
