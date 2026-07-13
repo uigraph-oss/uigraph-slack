@@ -1,9 +1,9 @@
 import { App } from '@slack/bolt'
-import { slackifyMarkdown } from 'slackify-markdown'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
 import { closeMcp, initMcp } from './mcp/client'
+import { formatForSlack } from './slack/format'
 import { buildMessages } from './slack/messages'
 import type { SlackMessage } from './types'
 
@@ -36,7 +36,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
     })
 
     const reply = await answerThread(thread.messages ?? [], context.botUserId)
-    await say({ text: slackifyMarkdown(reply), thread_ts: threadTs })
+    await say({ text: formatForSlack(reply), thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in thread ${threadTs}`)
   } catch (error) {
     await say({
@@ -100,7 +100,7 @@ app.event('message', async ({ event, say, client, context }) => {
       reply = await answer(messages)
     }
 
-    await say({ text: slackifyMarkdown(reply), thread_ts: threadTs })
+    await say({ text: formatForSlack(reply), thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in DM ${event.channel}`)
   } catch (error) {
     await say({
