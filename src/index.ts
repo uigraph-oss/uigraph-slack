@@ -1,0 +1,1 @@
+console.log('Hello, TypeScript 6.0.3 with ESNext module system and NodeJs resolution strategy! Targeting ES2022.');
