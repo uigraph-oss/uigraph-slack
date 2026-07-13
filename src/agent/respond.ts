@@ -33,9 +33,6 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
     }
   }
 
-  log.success(
-    `Answer ready in ${result.steps.length} step(s), ${result.usage.totalTokens ?? 0} tokens`
-  )
-
+  log.success(inspect(result, { depth: null }))
   return result.text
 }
