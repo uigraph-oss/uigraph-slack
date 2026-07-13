@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { logger } from './logger'
 
 const envSchema = z.object({
   SLACK_BOT_TOKEN: z.string(),
@@ -27,3 +28,4 @@ const envSchema = z.object({
 })
 
 export const env = envSchema.parse(process.env)
+logger.info('Environment variables:', env)
