@@ -111,23 +111,36 @@ async function answerThread(
     ...liveMessages,
     { role: 'assistant', content: reply },
   ]
-  if (
-    estimateTokens([...messages, { role: 'assistant', content: reply }]) >
-    COMPACTION_TOKEN_BUDGET
-  ) {
-    const newSummary = await summarize(
-      checkpoint?.summaryText ?? null,
-      finalMessages
+  const usedTokens = estimateTokens([
+    ...messages,
+    { role: 'assistant', content: reply },
+  ])
+  const log = logger.withTag('compaction')
+
+  if (usedTokens <= COMPACTION_TOKEN_BUDGET) {
+    log.info(
+      `Thread ${threadTs}: ${usedTokens}/${COMPACTION_TOKEN_BUDGET} tokens, no compaction`
     )
-    await writeCheckpoint(
-      client,
-      channel,
-      threadTs,
-      newSummary,
-      checkpoint?.fileId
-    )
-    logger.withTag('compaction').success(`Compacted thread ${threadTs}`)
+    return reply
   }
+
+  log.info(
+    `Thread ${threadTs}: ${usedTokens}/${COMPACTION_TOKEN_BUDGET} tokens over budget, compacting ${finalMessages.length} message(s)`
+  )
+  const newSummary = await summarize(
+    checkpoint?.summaryText ?? null,
+    finalMessages
+  )
+  await writeCheckpoint(
+    client,
+    channel,
+    threadTs,
+    newSummary,
+    checkpoint?.fileId
+  )
+  log.success(
+    `Thread ${threadTs}: compacted to summary of ${newSummary.length} chars`
+  )
 
   return reply
 }
