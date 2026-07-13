@@ -6,8 +6,7 @@ import { inspect } from 'node:util'
 const logsDir = join(process.cwd(), '.logs')
 mkdirSync(logsDir, { recursive: true })
 
-const startedAt = new Date().toISOString().replace(/[:.]/g, '-')
-const logFilePath = join(logsDir, `${startedAt}-${process.pid}.log`)
+const logFilePath = join(logsDir, `${Date.now()}-${process.pid}.log`)
 
 const fileStream = createWriteStream(logFilePath, { flags: 'a' })
 
