@@ -124,21 +124,31 @@ app.event('message', async ({ event, say, client, context }) => {
   logger.withTag('slack').info(`DM from ${event.user} in ${event.channel}`)
 
   try {
-    const slackMessages = threadTs
-      ? (
-          await client.conversations.replies({
-            channel: event.channel,
-            ts: threadTs,
-          })
-        ).messages
-      : (
-          await client.conversations.history({
-            channel: event.channel,
-            limit: 20,
-          })
-        ).messages?.reverse()
+    let slackMessages: SlackMessage[]
+    if (threadTs) {
+      const before = await client.conversations.history({
+        channel: event.channel,
+        latest: threadTs,
+        inclusive: true,
+        limit: 20,
+      })
+      const thread = await client.conversations.replies({
+        channel: event.channel,
+        ts: threadTs,
+      })
+      slackMessages = [
+        ...(before.messages ?? []).reverse(),
+        ...(thread.messages ?? []).slice(1),
+      ]
+    } else {
+      const history = await client.conversations.history({
+        channel: event.channel,
+        limit: 20,
+      })
+      slackMessages = (history.messages ?? []).reverse()
+    }
 
-    const messages = await buildMessages(slackMessages ?? [], context.botUserId)
+    const messages = await buildMessages(slackMessages, context.botUserId)
 
     const reply = await answer(messages)
     await say({ text: reply, thread_ts: threadTs })
