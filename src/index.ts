@@ -62,7 +62,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       thread_ts: threadTs,
     })
 
-    logger.withTag('slack').error('Failed to answer mention', error)
+    logger.withTag('slack').error(error)
   }
 })
 
