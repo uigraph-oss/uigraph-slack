@@ -1,5 +1,5 @@
 import { App } from '@slack/bolt'
-import type { ModelMessage } from 'ai'
+import type { ModelMessage, UserContent } from 'ai'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
@@ -25,13 +25,46 @@ app.event('app_mention', async ({ event, say, client, context }) => {
     const messages: ModelMessage[] = []
     for (const message of thread.messages ?? []) {
       const text = (message.text ?? '').replace(/<@[^>]+>/g, '').trim()
-      if (text === '') {
+      const isBot =
+        message.bot_id !== undefined || message.user === context.botUserId
+
+      if (isBot) {
+        if (text === '') {
+          continue
+        }
+        messages.push({ role: 'assistant', content: text })
         continue
       }
 
-      const isBot =
-        message.bot_id !== undefined || message.user === context.botUserId
-      messages.push({ role: isBot ? 'assistant' : 'user', content: text })
+      const content: UserContent = []
+      if (text !== '') {
+        content.push({ type: 'text', text })
+      }
+
+      for (const file of message.files ?? []) {
+        if (
+          file.mimetype === undefined ||
+          !file.mimetype.startsWith('image/')
+        ) {
+          continue
+        }
+
+        const url = file.url_private_download ?? file.url_private
+        if (url === undefined) {
+          continue
+        }
+
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+        })
+        const data = new Uint8Array(await response.arrayBuffer())
+        content.push({ type: 'file', data, mediaType: file.mimetype })
+      }
+
+      if (content.length === 0) {
+        continue
+      }
+      messages.push({ role: 'user', content })
     }
 
     const reply = await answer(messages)
