@@ -551,3 +551,353 @@ tail`
     expect(out).toContain('The billing service talks to the ledger DB.')
   })
 })
+
+function makeRng(seed: number): () => number {
+  let state = seed
+  return function next(): number {
+    state |= 0
+    state = (state + 0x6d2b79f5) | 0
+    let t = Math.imul(state ^ (state >>> 15), 1 | state)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const SUBJECTS = [
+  'auth',
+  'billing',
+  'ledger',
+  'gateway',
+  'cache',
+  'payments',
+  'notes',
+  'accounts',
+  'ecommerce',
+  'analytics',
+  'recordings',
+  'profiles',
+  'invoices',
+  'usage',
+  'reconcile',
+  'checkout',
+  'payout',
+  'dunning',
+  'metering',
+  'identity',
+  'catalog',
+  'inventory',
+  'shipping',
+  'search',
+]
+
+const VALUES = [
+  'service',
+  'worker',
+  'active',
+  'inactive',
+  'tier1',
+  'tier2',
+  'tier3',
+  'Postgres',
+  'MySQL',
+  'SQLite',
+  'MongoDB',
+  'DynamoDB',
+  'REST',
+  'GraphQL',
+  'gRPC',
+  'bearer',
+  'none',
+  'primary key',
+  'not null',
+  'nullable',
+  'UTC start',
+  'read only',
+  'write heavy',
+  'batch job',
+]
+
+const HEADERS = [
+  'Name',
+  'Type',
+  'Owner',
+  'Status',
+  'Path',
+  'Auth',
+  'Column',
+  'Nullable',
+  'Notes',
+  'Focus',
+  'Frame',
+  'Field',
+  'Data',
+  'Mode',
+  'Backend',
+  'Scope',
+  'Region',
+  'Kind',
+]
+
+const HR_VARIANTS = [
+  '---',
+  '***',
+  '___',
+  '- - -',
+  '* * *',
+  '-----',
+  '****',
+  '____',
+]
+
+const PROSE = [
+  'Here is what I found in the org.',
+  'No guessing, this is straight from the tools.',
+  'Want me to go deeper on any of these?',
+  'That is the full picture from the source.',
+  'Everything below is live data.',
+  'Let me confirm from the actual tool output.',
+  'This scopes to the current organization only.',
+]
+
+const SEPARATOR_CELLS = ['---', ':---', '---:', ':---:', '----', '-----']
+
+type GeneratedCase = {
+  name: string
+  input: string
+  out: string
+  tokens: string[]
+}
+
+function generateCase(seed: number): GeneratedCase {
+  const rng = makeRng(seed)
+  function pick<T>(arr: T[]): T {
+    return arr[Math.floor(rng() * arr.length)]
+  }
+  function int(min: number, max: number): number {
+    return min + Math.floor(rng() * (max - min + 1))
+  }
+  function arrowChain(): string {
+    const count = int(2, 5)
+    const parts: string[] = []
+    for (let i = 0; i < count; i++) {
+      parts.push(pick(SUBJECTS))
+    }
+    return parts.join(' → ')
+  }
+
+  const tokens: string[] = []
+  const lines: string[] = []
+
+  const leadingProse = pick(PROSE)
+  tokens.push(leadingProse)
+  lines.push(leadingProse)
+  lines.push('')
+
+  const hrBefore = int(0, 3)
+  for (let i = 0; i < hrBefore; i++) {
+    lines.push(pick(HR_VARIANTS))
+  }
+  lines.push('')
+
+  const heading = `## ${pick(SUBJECTS)} report`
+  lines.push(heading)
+  lines.push('')
+
+  const tableCount = int(1, 3)
+  for (let t = 0; t < tableCount; t++) {
+    const cols = int(2, 6)
+    const headerCells: string[] = []
+    const usedHeaders = new Set<string>()
+    while (headerCells.length < cols) {
+      const h = pick(HEADERS)
+      if (usedHeaders.has(h)) {
+        continue
+      }
+      usedHeaders.add(h)
+      headerCells.push(h)
+    }
+    lines.push(`| ${headerCells.join(' | ')} |`)
+
+    const sepCells: string[] = []
+    for (let c = 0; c < cols; c++) {
+      sepCells.push(pick(SEPARATOR_CELLS))
+    }
+    lines.push(`| ${sepCells.join(' | ')} |`)
+
+    const rows = int(1, 8)
+    for (let r = 0; r < rows; r++) {
+      const cells: string[] = []
+      const first = pick(SUBJECTS)
+      cells.push(first)
+      tokens.push(first)
+      for (let c = 1; c < cols; c++) {
+        const value = rng() < 0.35 ? arrowChain() : pick(VALUES)
+        cells.push(value)
+        tokens.push(value)
+      }
+      lines.push(`| ${cells.join(' | ')} |`)
+    }
+    lines.push('')
+
+    if (rng() < 0.6) {
+      lines.push(pick(HR_VARIANTS))
+      lines.push('')
+    }
+  }
+
+  const bulletCount = int(0, 4)
+  for (let b = 0; b < bulletCount; b++) {
+    const token = pick(SUBJECTS)
+    tokens.push(token)
+    lines.push(`- ${token} — ${pick(VALUES)}`)
+  }
+  lines.push('')
+
+  const hrAfter = int(0, 2)
+  for (let i = 0; i < hrAfter; i++) {
+    lines.push(pick(HR_VARIANTS))
+  }
+
+  const trailingProse = pick(PROSE)
+  tokens.push(trailingProse)
+  lines.push(trailingProse)
+
+  const input = lines.join('\n')
+  return {
+    name: `case-${seed}`,
+    input,
+    out: formatForSlack(input),
+    tokens,
+  }
+}
+
+const GENERATED_CASE_COUNT = 1200
+const generatedCases: GeneratedCase[] = []
+for (let seed = 1; seed <= GENERATED_CASE_COUNT; seed++) {
+  generatedCases.push(generateCase(seed))
+}
+
+describe('formatForSlack — generated fuzz corpus (invariants)', () => {
+  it.each(generatedCases)('never leaves a pipe table ($name)', ({ out }) => {
+    expect(hasPipeTable(out)).toBe(false)
+  })
+
+  it.each(generatedCases)(
+    'never leaves a horizontal rule ($name)',
+    ({ out }) => {
+      expect(hasHorizontalRule(out)).toBe(false)
+    }
+  )
+
+  it.each(generatedCases)(
+    'never leaks GitHub-style bold ($name)',
+    ({ out }) => {
+      expect(hasGithubBold(out)).toBe(false)
+    }
+  )
+
+  it.each(generatedCases)(
+    'preserves every content token ($name)',
+    ({ out, tokens }) => {
+      for (const token of tokens) {
+        expect(out).toContain(token)
+      }
+    }
+  )
+})
+
+function generateHrOnlyCase(seed: number): { input: string; out: string } {
+  const rng = makeRng(seed * 7919)
+  function pick<T>(arr: T[]): T {
+    return arr[Math.floor(rng() * arr.length)]
+  }
+  const lineCount = 3 + Math.floor(rng() * 8)
+  const lines: string[] = []
+  for (let i = 0; i < lineCount; i++) {
+    if (rng() < 0.5) {
+      lines.push(pick(HR_VARIANTS))
+    } else {
+      lines.push(pick(PROSE))
+    }
+  }
+  const input = lines.join('\n')
+  return { input, out: formatForSlack(input) }
+}
+
+const HR_CASE_COUNT = 600
+const hrCases: { name: string; input: string; out: string }[] = []
+for (let seed = 1; seed <= HR_CASE_COUNT; seed++) {
+  const { input, out } = generateHrOnlyCase(seed)
+  hrCases.push({ name: `hr-${seed}`, input, out })
+}
+
+describe('formatForSlack — generated horizontal-rule corpus', () => {
+  it.each(hrCases)(
+    'removes all rules and keeps prose ($name)',
+    ({ input, out }) => {
+      expect(hasHorizontalRule(out)).toBe(false)
+      for (const line of input.split('\n')) {
+        if (PROSE.includes(line)) {
+          expect(out).toContain(line)
+        }
+      }
+    }
+  )
+})
+
+function generateWideTableCase(seed: number): {
+  name: string
+  out: string
+  labelled: string[]
+} {
+  const rng = makeRng(seed * 104729)
+  function pick<T>(arr: T[]): T {
+    return arr[Math.floor(rng() * arr.length)]
+  }
+  const cols = 3 + Math.floor(rng() * 4)
+  const headerCells: string[] = []
+  const used = new Set<string>()
+  while (headerCells.length < cols) {
+    const h = pick(HEADERS)
+    if (used.has(h)) {
+      continue
+    }
+    used.add(h)
+    headerCells.push(h)
+  }
+  const lines: string[] = [
+    `| ${headerCells.join(' | ')} |`,
+    `| ${headerCells.map(() => '---').join(' | ')} |`,
+  ]
+  const labelled: string[] = []
+  const rows = 1 + Math.floor(rng() * 5)
+  for (let r = 0; r < rows; r++) {
+    const cells = [pick(SUBJECTS)]
+    for (let c = 1; c < cols; c++) {
+      const value = pick(VALUES)
+      cells.push(value)
+      labelled.push(`${headerCells[c]}: ${value}`)
+    }
+    lines.push(`| ${cells.join(' | ')} |`)
+  }
+  const input = lines.join('\n')
+  return { name: `wide-${seed}`, out: formatForSlack(input), labelled }
+}
+
+const WIDE_CASE_COUNT = 600
+const wideCases: { name: string; out: string; labelled: string[] }[] = []
+for (let seed = 1; seed <= WIDE_CASE_COUNT; seed++) {
+  wideCases.push(generateWideTableCase(seed))
+}
+
+describe('formatForSlack — generated wide-table corpus (header labelling)', () => {
+  it.each(wideCases)(
+    'labels every non-first column by header ($name)',
+    ({ out, labelled }) => {
+      expect(hasPipeTable(out)).toBe(false)
+      for (const pair of labelled) {
+        expect(out).toContain(pair)
+      }
+    }
+  )
+})
