@@ -38,11 +38,6 @@ export function formatForSlack(markdown: string): string {
       continue
     }
 
-    if (/^\s*([-*_]\s*){3,}$/.test(line)) {
-      i++
-      continue
-    }
-
     const isRow = /^\s*\|.*\|\s*$/.test(line)
     const next = lines[i + 1] ?? ''
     const isSeparator =
@@ -86,4 +81,6 @@ export function formatForSlack(markdown: string): string {
   }
 
   return slackifyMarkdown(out.join('\n'))
+    .replace(/^[ \t]*\*\*\*[ \t]*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
 }
