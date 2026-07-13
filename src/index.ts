@@ -105,31 +105,22 @@ async function answerThread(
   }
   messages.push(...liveMessages)
 
-  const reply = await answer(messages)
-
-  const finalMessages: ModelMessage[] = [
-    ...liveMessages,
-    { role: 'assistant', content: reply },
-  ]
-  const usedTokens = estimateTokens([
-    ...messages,
-    { role: 'assistant', content: reply },
-  ])
+  const inputTokens = estimateTokens(messages)
   const log = logger.withTag('compaction')
 
-  if (usedTokens <= COMPACTION_TOKEN_BUDGET) {
+  if (inputTokens <= COMPACTION_TOKEN_BUDGET) {
     log.info(
-      `Thread ${threadTs}: ${usedTokens}/${COMPACTION_TOKEN_BUDGET} tokens, no compaction`
+      `Thread ${threadTs}: context is ${inputTokens}/${COMPACTION_TOKEN_BUDGET} tokens, no compaction`
     )
-    return reply
+    return answer(messages)
   }
 
   log.info(
-    `Thread ${threadTs}: ${usedTokens}/${COMPACTION_TOKEN_BUDGET} tokens over budget, compacting ${finalMessages.length} message(s)`
+    `Thread ${threadTs}: context is ${inputTokens}/${COMPACTION_TOKEN_BUDGET} tokens over budget, compacting ${liveMessages.length} message(s)`
   )
   const newSummary = await summarize(
     checkpoint?.summaryText ?? null,
-    finalMessages
+    liveMessages
   )
   await writeCheckpoint(
     client,
@@ -142,7 +133,7 @@ async function answerThread(
     `Thread ${threadTs}: compacted to summary of ${newSummary.length} chars`
   )
 
-  return reply
+  return answer(messages)
 }
 
 app.event('app_mention', async ({ event, say, client, context }) => {

@@ -14,7 +14,7 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
   const result = await generateText({
     model: aiModel,
     tools: getTools(),
-    stopWhen: stepCountIs(6),
+    stopWhen: stepCountIs(99),
     system: SLACK_BOT_SYSTEM_PROMPT,
     messages,
   })
