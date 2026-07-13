@@ -1,4 +1,5 @@
 import { App } from '@slack/bolt'
+import type { webApi } from '@slack/bolt'
 import { inspect } from 'node:util'
 import { answer } from './agent/respond'
 import { env } from './env'
@@ -16,11 +17,13 @@ const app = new App({
 
 async function answerThread(
   slackMessages: SlackMessage[],
-  botUserId: string | undefined
+  botUserId: string | undefined,
+  client: webApi.WebClient
 ): Promise<string> {
   const messages = await buildMessages(
     slackMessages.slice(-env.LLM_MESSAGES_LIMIT),
-    botUserId
+    botUserId,
+    client
   )
   return answer(messages)
 }
@@ -36,7 +39,11 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       ts: threadTs,
     })
 
-    const reply = await answerThread(thread.messages ?? [], context.botUserId)
+    const reply = await answerThread(
+      thread.messages ?? [],
+      context.botUserId,
+      client
+    )
     const formatted = formatForSlack(reply)
     await say({ text: formatted.message, thread_ts: threadTs })
 
@@ -122,7 +129,7 @@ app.event('message', async ({ event, say, client, context }) => {
         ...(thread.messages ?? []).slice(1),
       ]
 
-      reply = await answerThread(slackMessages, context.botUserId)
+      reply = await answerThread(slackMessages, context.botUserId, client)
     } else {
       const history = await client.conversations.history({
         channel: event.channel,
@@ -131,7 +138,11 @@ app.event('message', async ({ event, say, client, context }) => {
       const slackMessages = (history.messages ?? [])
         .reverse()
         .slice(-env.LLM_MESSAGES_LIMIT)
-      const messages = await buildMessages(slackMessages, context.botUserId)
+      const messages = await buildMessages(
+        slackMessages,
+        context.botUserId,
+        client
+      )
       reply = await answer(messages)
     }
 

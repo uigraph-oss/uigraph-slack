@@ -1,11 +1,14 @@
 import { env } from '@/env'
 import { logger } from '@/logger'
+import { resolveUserName } from '@/slack/user'
 import type { SlackMessage } from '@/types'
+import type { webApi } from '@slack/bolt'
 import type { ModelMessage, UserContent } from 'ai'
 
 export async function buildMessages(
   slackMessages: SlackMessage[],
-  botUserId: string | undefined
+  botUserId: string | undefined,
+  client: webApi.WebClient
 ): Promise<ModelMessage[]> {
   const allowedPrefixes: string[] = []
   if (env.LLM_ATTACHMENT_IMAGE) {
@@ -34,7 +37,11 @@ export async function buildMessages(
     const content: UserContent = []
     if (text !== '') {
       if (message.user) {
-        content.push({ type: 'text', text: `> ${message.user}\n\n${text}` })
+        const name = await resolveUserName(client, message.user)
+        content.push({
+          type: 'text',
+          text: `<author>${name} <${message.user}></author>\n\n${text}`,
+        })
       } else {
         content.push({ type: 'text', text })
       }
