@@ -87,6 +87,32 @@ export function rulesToBlankLines(text: string): string {
   return text.replace(/^\*\*\*$\n?/gm, '').replace(/\n{4,}/g, '\n\n\n')
 }
 
-export function formatForSlack(markdown: string): string {
-  return rulesToBlankLines(slackifyMarkdown(tablesToBullets(markdown)))
+export interface NormalizedSlackMessage {
+  message: string
+  assets: string[]
+}
+
+export function normalizeSlackMessage(
+  markdown: string
+): NormalizedSlackMessage {
+  const withBullets = tablesToBullets(markdown)
+
+  const assets: string[] = []
+  const message = withBullets.replace(
+    /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,
+    (_match, url) => {
+      assets.push(url)
+      return ''
+    }
+  )
+
+  return { message, assets }
+}
+
+export function formatForSlack(markdown: string): NormalizedSlackMessage {
+  const { message, assets } = normalizeSlackMessage(markdown)
+  return {
+    message: rulesToBlankLines(slackifyMarkdown(message)),
+    assets,
+  }
 }
