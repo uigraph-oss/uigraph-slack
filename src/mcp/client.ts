@@ -12,10 +12,7 @@ let uigraphTools: ToolSet | undefined
 export async function initMcp(): Promise<ToolSet> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${env.UIGRAPH_ACCESS_TOKEN}`,
-  }
-
-  if (env.UIGRAPH_ORG_ID) {
-    headers['X-UIGraph-Org-Id'] = env.UIGRAPH_ORG_ID
+    'X-UIGraph-Org-Id': env.UIGRAPH_ORG_ID,
   }
 
   const transport = new StreamableHTTPClientTransport(

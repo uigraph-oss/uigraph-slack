@@ -1,13 +1,6 @@
-import { App, type webApi } from '@slack/bolt'
+import { App } from '@slack/bolt'
 import type { ModelMessage, UserContent } from 'ai'
-import {
-  COMPACTION_TOKEN_BUDGET,
-  estimateTokens,
-  findCheckpoint,
-  summarize,
-  writeCheckpoint,
-  type SlackMessage,
-} from './agent/compaction'
+import { THREAD_MESSAGE_WINDOW, type SlackMessage } from './agent/compaction'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
@@ -78,62 +71,11 @@ async function buildMessages(
 }
 
 async function answerThread(
-  channel: string,
-  threadTs: string,
   slackMessages: SlackMessage[],
-  botUserId: string | undefined,
-  client: webApi.WebClient
+  botUserId: string | undefined
 ): Promise<string> {
-  const checkpoint = await findCheckpoint(slackMessages, botUserId)
-
-  const liveSlackMessages =
-    checkpoint === null
-      ? slackMessages
-      : slackMessages.filter(
-          (m) =>
-            m.ts !== undefined && Number(m.ts) > Number(checkpoint.checkpointTs)
-        )
-
-  const liveMessages = await buildMessages(liveSlackMessages, botUserId)
-
-  const messages: ModelMessage[] = []
-  if (checkpoint !== null) {
-    messages.push({
-      role: 'user',
-      content: `[Summary of earlier conversation]\n${checkpoint.summaryText}`,
-    })
-  }
-  messages.push(...liveMessages)
-
-  const inputTokens = estimateTokens(messages)
-  const log = logger.withTag('compaction')
-
-  if (inputTokens <= COMPACTION_TOKEN_BUDGET) {
-    log.info(
-      `Thread ${threadTs}: context is ${inputTokens}/${COMPACTION_TOKEN_BUDGET} tokens, no compaction`
-    )
-    return answer(messages)
-  }
-
-  log.info(
-    `Thread ${threadTs}: context is ${inputTokens}/${COMPACTION_TOKEN_BUDGET} tokens over budget, compacting ${liveMessages.length} message(s)`
-  )
-  const newSummary = await summarize(
-    checkpoint?.summaryText ?? null,
-    liveMessages
-  )
-  await writeCheckpoint(
-    client,
-    channel,
-    threadTs,
-    newSummary,
-    checkpoint?.fileId
-  )
-  log.success(
-    `Thread ${threadTs}: compacted to summary of ${newSummary.length} chars`
-  )
-
-  return answer(messages)
+  const messages = await buildMessages(slackMessages, botUserId)
+  return answer(messages.slice(-THREAD_MESSAGE_WINDOW))
 }
 
 app.event('app_mention', async ({ event, say, client, context }) => {
@@ -147,13 +89,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       ts: threadTs,
     })
 
-    const reply = await answerThread(
-      event.channel,
-      threadTs,
-      thread.messages ?? [],
-      context.botUserId,
-      client
-    )
+    const reply = await answerThread(thread.messages ?? [], context.botUserId)
     await say({ text: reply, thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in thread ${threadTs}`)
   } catch (error) {
@@ -205,13 +141,7 @@ app.event('message', async ({ event, say, client, context }) => {
         ...(thread.messages ?? []).slice(1),
       ]
 
-      reply = await answerThread(
-        event.channel,
-        threadTs,
-        slackMessages,
-        context.botUserId,
-        client
-      )
+      reply = await answerThread(slackMessages, context.botUserId)
     } else {
       const history = await client.conversations.history({
         channel: event.channel,
@@ -219,7 +149,7 @@ app.event('message', async ({ event, say, client, context }) => {
       })
       const slackMessages = (history.messages ?? []).reverse()
       const messages = await buildMessages(slackMessages, context.botUserId)
-      reply = await answer(messages)
+      reply = await answer(messages.slice(-THREAD_MESSAGE_WINDOW))
     }
 
     await say({ text: reply, thread_ts: threadTs })
