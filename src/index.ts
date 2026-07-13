@@ -11,6 +11,68 @@ const app = new App({
   socketMode: true,
 })
 
+type SlackMessage = NonNullable<
+  Awaited<ReturnType<typeof app.client.conversations.replies>>['messages']
+>[number]
+
+async function buildMessages(
+  slackMessages: SlackMessage[],
+  botUserId: string | undefined
+): Promise<ModelMessage[]> {
+  const messages: ModelMessage[] = []
+  for (const message of slackMessages) {
+    const text = (message.text ?? '').replace(/<@[^>]+>/g, '').trim()
+    const isBot = message.bot_id !== undefined || message.user === botUserId
+
+    if (isBot) {
+      if (text === '') {
+        continue
+      }
+      messages.push({ role: 'assistant', content: text })
+      continue
+    }
+
+    const content: UserContent = []
+    if (text !== '') {
+      content.push({ type: 'text', text })
+    }
+
+    for (const file of message.files ?? []) {
+      if (file.mimetype === undefined || !file.mimetype.startsWith('image/')) {
+        continue
+      }
+
+      const url = file.url_private_download ?? file.url_private
+      if (url === undefined) {
+        continue
+      }
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      })
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!response.ok || !contentType.startsWith('image/')) {
+        logger
+          .withTag('slack')
+          .error(
+            `Image download failed for ${file.name}: status ${response.status}, content-type ${contentType}`
+          )
+        continue
+      }
+
+      const data = new Uint8Array(await response.arrayBuffer())
+      content.push({ type: 'file', data, mediaType: file.mimetype })
+    }
+
+    if (content.length === 0) {
+      continue
+    }
+    messages.push({ role: 'user', content })
+  }
+
+  return messages
+}
+
 app.event('app_mention', async ({ event, say, client, context }) => {
   const threadTs = event.thread_ts ?? event.ts
 
@@ -22,60 +84,10 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       ts: threadTs,
     })
 
-    const messages: ModelMessage[] = []
-    for (const message of thread.messages ?? []) {
-      const text = (message.text ?? '').replace(/<@[^>]+>/g, '').trim()
-      const isBot =
-        message.bot_id !== undefined || message.user === context.botUserId
-
-      if (isBot) {
-        if (text === '') {
-          continue
-        }
-        messages.push({ role: 'assistant', content: text })
-        continue
-      }
-
-      const content: UserContent = []
-      if (text !== '') {
-        content.push({ type: 'text', text })
-      }
-
-      for (const file of message.files ?? []) {
-        if (
-          file.mimetype === undefined ||
-          !file.mimetype.startsWith('image/')
-        ) {
-          continue
-        }
-
-        const url = file.url_private_download ?? file.url_private
-        if (url === undefined) {
-          continue
-        }
-
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
-        })
-        const contentType = response.headers.get('content-type') ?? ''
-        if (!response.ok || !contentType.startsWith('image/')) {
-          logger
-            .withTag('slack')
-            .error(
-              `Image download failed for ${file.name}: status ${response.status}, content-type ${contentType}`
-            )
-          continue
-        }
-
-        const data = new Uint8Array(await response.arrayBuffer())
-        content.push({ type: 'file', data, mediaType: file.mimetype })
-      }
-
-      if (content.length === 0) {
-        continue
-      }
-      messages.push({ role: 'user', content })
-    }
+    const messages = await buildMessages(
+      thread.messages ?? [],
+      context.botUserId
+    )
 
     const reply = await answer(messages)
     await say({ text: reply, thread_ts: threadTs })
@@ -87,6 +99,57 @@ app.event('app_mention', async ({ event, say, client, context }) => {
     })
 
     logger.withTag('slack').error('Failed to answer mention', error)
+  }
+})
+
+app.event('message', async ({ event, say, client, context }) => {
+  if (!('channel_type' in event) || event.channel_type !== 'im') {
+    return
+  }
+  if (event.subtype !== undefined && event.subtype !== 'file_share') {
+    return
+  }
+  if ('bot_id' in event && event.bot_id !== undefined) {
+    return
+  }
+  if (!('user' in event) || event.user === undefined) {
+    return
+  }
+  if (event.user === context.botUserId) {
+    return
+  }
+
+  const threadTs = event.thread_ts
+
+  logger.withTag('slack').info(`DM from ${event.user} in ${event.channel}`)
+
+  try {
+    const slackMessages = threadTs
+      ? (
+          await client.conversations.replies({
+            channel: event.channel,
+            ts: threadTs,
+          })
+        ).messages
+      : (
+          await client.conversations.history({
+            channel: event.channel,
+            limit: 20,
+          })
+        ).messages?.reverse()
+
+    const messages = await buildMessages(slackMessages ?? [], context.botUserId)
+
+    const reply = await answer(messages)
+    await say({ text: reply, thread_ts: threadTs })
+    logger.withTag('slack').success(`Replied in DM ${event.channel}`)
+  } catch (error) {
+    await say({
+      text: 'Sorry, I hit an error answering that.',
+      thread_ts: threadTs,
+    })
+
+    logger.withTag('slack').error('Failed to answer DM', error)
   }
 })
 
