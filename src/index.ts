@@ -42,6 +42,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       text: 'Sorry, I hit an error answering that.',
       thread_ts: threadTs,
     })
+
     logger.withTag('slack').error('Failed to answer mention', error)
   }
 })
