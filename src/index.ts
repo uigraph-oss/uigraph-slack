@@ -40,6 +40,14 @@ app.event('app_mention', async ({ event, say, client, context }) => {
     const formatted = formatForSlack(reply)
     await say({ text: formatted.message, thread_ts: threadTs })
 
+    if (formatted.assets.length > 0) {
+      logger
+        .withTag('slack')
+        .info(
+          `Uploading ${formatted.assets.length} asset(s): ${inspect(formatted.assets)}`
+        )
+    }
+
     for (const url of formatted.assets) {
       const response = await fetch(url)
       if (!response.ok) {
@@ -48,12 +56,20 @@ app.event('app_mention', async ({ event, say, client, context }) => {
           .error(`Asset download failed for ${url}: status ${response.status}`)
         continue
       }
-      await client.files.uploadV2({
-        channel_id: event.channel,
-        thread_ts: threadTs,
-        file: Buffer.from(await response.arrayBuffer()),
-        filename: new URL(url).pathname.split('/').pop() || 'image',
-      })
+      const filename = new URL(url).pathname.split('/').pop() || 'image'
+      try {
+        await client.files.uploadV2({
+          channel_id: event.channel,
+          thread_ts: threadTs,
+          file: Buffer.from(await response.arrayBuffer()),
+          filename,
+        })
+        logger
+          .withTag('slack')
+          .success(`Uploaded asset ${filename} from ${url}`)
+      } catch (error) {
+        logger.withTag('slack').error(`Asset upload failed for ${url}`, error)
+      }
     }
 
     logger.withTag('slack').success(`Replied in thread ${threadTs}`)
@@ -122,6 +138,14 @@ app.event('message', async ({ event, say, client, context }) => {
     const formatted = formatForSlack(reply)
     await say({ text: formatted.message, thread_ts: threadTs })
 
+    if (formatted.assets.length > 0) {
+      logger
+        .withTag('slack')
+        .info(
+          `Uploading ${formatted.assets.length} asset(s): ${inspect(formatted.assets)}`
+        )
+    }
+
     for (const url of formatted.assets) {
       const response = await fetch(url)
       if (!response.ok) {
@@ -132,19 +156,26 @@ app.event('message', async ({ event, say, client, context }) => {
       }
       const file = Buffer.from(await response.arrayBuffer())
       const filename = new URL(url).pathname.split('/').pop() || 'image'
-      if (threadTs) {
-        await client.files.uploadV2({
-          channel_id: event.channel,
-          thread_ts: threadTs,
-          file,
-          filename,
-        })
-      } else {
-        await client.files.uploadV2({
-          channel_id: event.channel,
-          file,
-          filename,
-        })
+      try {
+        if (threadTs) {
+          await client.files.uploadV2({
+            channel_id: event.channel,
+            thread_ts: threadTs,
+            file,
+            filename,
+          })
+        } else {
+          await client.files.uploadV2({
+            channel_id: event.channel,
+            file,
+            filename,
+          })
+        }
+        logger
+          .withTag('slack')
+          .success(`Uploaded asset ${filename} from ${url}`)
+      } catch (error) {
+        logger.withTag('slack').error(`Asset upload failed for ${url}`, error)
       }
     }
 
