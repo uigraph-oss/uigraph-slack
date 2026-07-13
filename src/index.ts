@@ -36,7 +36,8 @@ app.event('app_mention', async ({ event, say, client, context }) => {
     })
 
     const reply = await answerThread(thread.messages ?? [], context.botUserId)
-    await say({ text: formatForSlack(reply), thread_ts: threadTs })
+    const formatted = formatForSlack(reply)
+    await say({ text: formatted.message, thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in thread ${threadTs}`)
   } catch (error) {
     await say({
@@ -100,7 +101,8 @@ app.event('message', async ({ event, say, client, context }) => {
       reply = await answer(messages)
     }
 
-    await say({ text: formatForSlack(reply), thread_ts: threadTs })
+    const formatted = formatForSlack(reply)
+    await say({ text: formatted.message, thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in DM ${event.channel}`)
   } catch (error) {
     await say({
