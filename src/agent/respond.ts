@@ -21,7 +21,14 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
 
   for (const step of result.steps) {
     for (const call of step.toolCalls) {
-      log.info(`Tool call: ${call.toolName}`, call.input)
+      log.info(
+        `MCP ${call.toolName} input: ${inspect(call.input, { depth: null })}`
+      )
+    }
+    for (const toolResult of step.toolResults) {
+      log.info(
+        `MCP ${toolResult.toolName} output: ${inspect(toolResult.output, { depth: null })}`
+      )
     }
   }
 
