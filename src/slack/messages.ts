@@ -7,6 +7,17 @@ export async function buildMessages(
   slackMessages: SlackMessage[],
   botUserId: string | undefined
 ): Promise<ModelMessage[]> {
+  const allowedPrefixes: string[] = []
+  if (env.LLM_ATTACHMENT_IMAGE) {
+    allowedPrefixes.push('image/')
+  }
+  if (env.LLM_ATTACHMENT_AUDIO) {
+    allowedPrefixes.push('audio/')
+  }
+  if (env.LLM_ATTACHMENT_VIDEO) {
+    allowedPrefixes.push('video/')
+  }
+
   const messages: ModelMessage[] = []
   for (const message of slackMessages) {
     const text = (message.text ?? '').replace(/<@[^>]+>/g, '').trim()
@@ -26,7 +37,12 @@ export async function buildMessages(
     }
 
     for (const file of message.files ?? []) {
-      if (file.mimetype === undefined || !file.mimetype.startsWith('image/')) {
+      const mimetype = file.mimetype
+      if (mimetype === undefined) {
+        continue
+      }
+      const prefix = allowedPrefixes.find((p) => mimetype.startsWith(p))
+      if (prefix === undefined) {
         continue
       }
 
@@ -39,17 +55,17 @@ export async function buildMessages(
         headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
       })
       const contentType = response.headers.get('content-type') ?? ''
-      if (!response.ok || !contentType.startsWith('image/')) {
+      if (!response.ok || !contentType.startsWith(prefix)) {
         logger
           .withTag('slack')
           .error(
-            `Image download failed for ${file.name}: status ${response.status}, content-type ${contentType}`
+            `Attachment download failed for ${file.name}: status ${response.status}, content-type ${contentType}`
           )
         continue
       }
 
       const data = new Uint8Array(await response.arrayBuffer())
-      content.push({ type: 'file', data, mediaType: file.mimetype })
+      content.push({ type: 'file', data, mediaType: mimetype })
     }
 
     if (content.length === 0) {

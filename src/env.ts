@@ -26,9 +26,9 @@ const envSchema = z.object({
   LLM_MAX_STEP: z.coerce.number().default(25),
   LLM_MESSAGES_LIMIT: z.coerce.number().default(25),
 
-  LLM_ATTACHMENT_IMAGE: z.boolean().default(false),
-  LLM_ATTACHMENT_AUDIO: z.boolean().default(false),
-  LLM_ATTACHMENT_VIDEO: z.boolean().default(false),
+  LLM_ATTACHMENT_IMAGE: z.stringbool().default(false),
+  LLM_ATTACHMENT_AUDIO: z.stringbool().default(false),
+  LLM_ATTACHMENT_VIDEO: z.stringbool().default(false),
 })
 
 export const env = envSchema.parse(process.env)
