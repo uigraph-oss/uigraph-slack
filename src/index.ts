@@ -1,5 +1,13 @@
-import { App } from '@slack/bolt'
+import { App, type webApi } from '@slack/bolt'
 import type { ModelMessage, UserContent } from 'ai'
+import {
+  COMPACTION_TOKEN_BUDGET,
+  estimateTokens,
+  findCheckpoint,
+  summarize,
+  writeCheckpoint,
+  type SlackMessage,
+} from './agent/compaction'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
@@ -10,10 +18,6 @@ const app = new App({
   appToken: env.SLACK_APP_TOKEN,
   socketMode: true,
 })
-
-type SlackMessage = NonNullable<
-  Awaited<ReturnType<typeof app.client.conversations.replies>>['messages']
->[number]
 
 async function buildMessages(
   slackMessages: SlackMessage[],
@@ -73,6 +77,61 @@ async function buildMessages(
   return messages
 }
 
+async function answerThread(
+  channel: string,
+  threadTs: string,
+  slackMessages: SlackMessage[],
+  botUserId: string | undefined,
+  client: webApi.WebClient
+): Promise<string> {
+  const checkpoint = await findCheckpoint(slackMessages, botUserId)
+
+  const liveSlackMessages =
+    checkpoint === null
+      ? slackMessages
+      : slackMessages.filter(
+          (m) =>
+            m.ts !== undefined && Number(m.ts) > Number(checkpoint.checkpointTs)
+        )
+
+  const liveMessages = await buildMessages(liveSlackMessages, botUserId)
+
+  const messages: ModelMessage[] = []
+  if (checkpoint !== null) {
+    messages.push({
+      role: 'user',
+      content: `[Summary of earlier conversation]\n${checkpoint.summaryText}`,
+    })
+  }
+  messages.push(...liveMessages)
+
+  const reply = await answer(messages)
+
+  const finalMessages: ModelMessage[] = [
+    ...liveMessages,
+    { role: 'assistant', content: reply },
+  ]
+  if (
+    estimateTokens([...messages, { role: 'assistant', content: reply }]) >
+    COMPACTION_TOKEN_BUDGET
+  ) {
+    const newSummary = await summarize(
+      checkpoint?.summaryText ?? null,
+      finalMessages
+    )
+    await writeCheckpoint(
+      client,
+      channel,
+      threadTs,
+      newSummary,
+      checkpoint?.fileId
+    )
+    logger.withTag('compaction').success(`Compacted thread ${threadTs}`)
+  }
+
+  return reply
+}
+
 app.event('app_mention', async ({ event, say, client, context }) => {
   const threadTs = event.thread_ts ?? event.ts
 
@@ -84,12 +143,13 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       ts: threadTs,
     })
 
-    const messages = await buildMessages(
+    const reply = await answerThread(
+      event.channel,
+      threadTs,
       thread.messages ?? [],
-      context.botUserId
+      context.botUserId,
+      client
     )
-
-    const reply = await answer(messages)
     await say({ text: reply, thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in thread ${threadTs}`)
   } catch (error) {
@@ -124,7 +184,7 @@ app.event('message', async ({ event, say, client, context }) => {
   logger.withTag('slack').info(`DM from ${event.user} in ${event.channel}`)
 
   try {
-    let slackMessages: SlackMessage[]
+    let reply: string
     if (threadTs) {
       const before = await client.conversations.history({
         channel: event.channel,
@@ -136,21 +196,28 @@ app.event('message', async ({ event, say, client, context }) => {
         channel: event.channel,
         ts: threadTs,
       })
-      slackMessages = [
+      const slackMessages = [
         ...(before.messages ?? []).reverse(),
         ...(thread.messages ?? []).slice(1),
       ]
+
+      reply = await answerThread(
+        event.channel,
+        threadTs,
+        slackMessages,
+        context.botUserId,
+        client
+      )
     } else {
       const history = await client.conversations.history({
         channel: event.channel,
         limit: 20,
       })
-      slackMessages = (history.messages ?? []).reverse()
+      const slackMessages = (history.messages ?? []).reverse()
+      const messages = await buildMessages(slackMessages, context.botUserId)
+      reply = await answer(messages)
     }
 
-    const messages = await buildMessages(slackMessages, context.botUserId)
-
-    const reply = await answer(messages)
     await say({ text: reply, thread_ts: threadTs })
     logger.withTag('slack').success(`Replied in DM ${event.channel}`)
   } catch (error) {
