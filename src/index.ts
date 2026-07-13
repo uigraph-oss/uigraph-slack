@@ -1,4 +1,5 @@
 import { App } from '@slack/bolt'
+import { inspect } from 'node:util'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
@@ -62,7 +63,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       thread_ts: threadTs,
     })
 
-    logger.withTag('slack').error(error)
+    logger.withTag('slack').error(inspect(error, { depth: null }))
   }
 })
 
