@@ -33,7 +33,11 @@ export async function buildMessages(
 
     const content: UserContent = []
     if (text !== '') {
-      content.push({ type: 'text', text })
+      if (message.user) {
+        content.push({ type: 'text', text: `> ${message.user}\n\n${text}` })
+      } else {
+        content.push({ type: 'text', text })
+      }
     }
 
     for (const file of message.files ?? []) {
