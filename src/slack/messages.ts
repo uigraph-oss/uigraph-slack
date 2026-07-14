@@ -5,7 +5,6 @@ import { resolveUserName } from '@/slack/user'
 import type { SlackMessage } from '@/types'
 import type { webApi } from '@slack/bolt'
 import type { AssistantContent, ModelMessage, UserContent } from 'ai'
-import { inspect } from 'node:util'
 
 export async function buildMessages(
   slackMessages: SlackMessage[],
@@ -37,7 +36,7 @@ export async function buildMessages(
         }
         content.push({
           type: 'text',
-          text: `<tool_outputs>\n${inspect(toolOutputs, { depth: null })}\n</tool_outputs>`,
+          text: `<tool_outputs>\n${toolOutputs.join('\n\n')}\n</tool_outputs>`,
         })
         messages.push({ role: 'assistant', content })
         continue

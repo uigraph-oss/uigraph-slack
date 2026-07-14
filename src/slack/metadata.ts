@@ -10,7 +10,7 @@ const METADATA_CHAR_LIMIT = 12000
 type PostMetadata = NonNullable<webApi.ChatPostMessageArguments['metadata']>
 
 export function buildTurnMetadata(
-  toolOutputs: unknown[]
+  toolOutputs: string[]
 ): PostMetadata | undefined {
   if (toolOutputs.length === 0) {
     return undefined
@@ -39,7 +39,7 @@ export function buildTurnMetadata(
   return metadata as unknown as PostMetadata
 }
 
-export function readToolOutputs(message: SlackMessage): unknown[] | undefined {
+export function readToolOutputs(message: SlackMessage): string[] | undefined {
   const metadata = message.metadata
   if (metadata === undefined) {
     return undefined
@@ -58,5 +58,5 @@ export function readToolOutputs(message: SlackMessage): unknown[] | undefined {
     .verbose(
       `Restored ${toolOutputs.length} tool output(s) from turn metadata: ${inspect(toolOutputs, { depth: null })}`
     )
-  return toolOutputs
+  return toolOutputs as string[]
 }

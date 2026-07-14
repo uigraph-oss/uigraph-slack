@@ -8,7 +8,7 @@ import { inspect } from 'node:util'
 
 export async function answer(
   messages: ModelMessage[]
-): Promise<{ text: string; toolOutputs: unknown[] }> {
+): Promise<{ text: string; toolOutputs: string[] }> {
   const log = logger.withTag('agent')
   log.info(`Answering thread with ${messages.length} message(s)`)
   log.verbose(`Messages: ${inspect(messages, { depth: null })}`)
@@ -21,6 +21,7 @@ export async function answer(
     messages,
   })
 
+  const toolOutputs: string[] = []
   for (const step of result.steps) {
     for (const call of step.toolCalls) {
       log.debug(
@@ -31,12 +32,21 @@ export async function answer(
       log.verbose(
         `MCP ${toolResult.toolName} output: ${inspect(toolResult.output, { depth: null })}`
       )
+
+      const output = toolResult.output as {
+        content?: Array<{ type?: string; text?: string }>
+        isError?: boolean
+      }
+      if (output.isError === true) {
+        continue
+      }
+      for (const part of output.content ?? []) {
+        if (part.type === 'text' && typeof part.text === 'string') {
+          toolOutputs.push(part.text)
+        }
+      }
     }
   }
-
-  const toolOutputs = result.steps.flatMap((step) =>
-    step.toolResults.map((toolResult) => toolResult.output)
-  )
 
   log.verbose('Result:', inspect(result, { depth: null }))
   return { text: result.text, toolOutputs }

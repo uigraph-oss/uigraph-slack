@@ -21,7 +21,7 @@ async function answerThread(
   slackMessages: SlackMessage[],
   botUserId: string | undefined,
   client: webApi.WebClient
-): Promise<{ text: string; toolOutputs: unknown[] }> {
+): Promise<{ text: string; toolOutputs: string[] }> {
   const messages = await buildMessages(
     slackMessages.slice(-env.LLM_MESSAGES_LIMIT),
     botUserId,
