@@ -2,6 +2,7 @@ import { type ConsolaReporter, createConsola } from 'consola'
 import { createWriteStream, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { inspect } from 'node:util'
+import { z } from 'zod'
 
 const logsDir = join(process.cwd(), '.logs')
 mkdirSync(logsDir, { recursive: true })
@@ -24,5 +25,10 @@ const fileReporter: ConsolaReporter = {
   },
 }
 
-export const logger = createConsola({ level: 4 })
+const debugMode = z
+  .stringbool()
+  .default(false)
+  .parse(process.env.SLACK_BOT_DEBUG_MODE)
+
+export const logger = createConsola({ level: debugMode ? 999 : 0 })
 logger.addReporter(fileReporter)
