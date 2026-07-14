@@ -35,5 +35,5 @@ export async function answer(
   }
 
   log.verbose('Result:', inspect(result, { depth: null }))
-  return { text: result.text, responseMessages: result.response.messages }
+  return { text: result.text, responseMessages: result.responseMessages }
 }
