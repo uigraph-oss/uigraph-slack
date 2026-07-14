@@ -1,0 +1,44 @@
+import { type ConsolaReporter, createConsola } from 'consola'
+import { createWriteStream, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { inspect } from 'node:util'
+import { env } from './env'
+
+export const logger = createConsola({
+  level: env.SLACK_BOT_DEBUG_MODE ? Number.POSITIVE_INFINITY : 0,
+})
+
+if (env.SLACK_BOT_DEBUG_MODE) {
+  const logsDir = join(process.cwd(), '.logs')
+  mkdirSync(logsDir, { recursive: true })
+
+  const logFilePath = join(logsDir, `${Date.now()}-${process.pid}.log`)
+
+  const fileStream = createWriteStream(logFilePath, { flags: 'a' })
+
+  const fileReporter: ConsolaReporter = {
+    log(logObj) {
+      const date = logObj.date.toISOString()
+      const type = logObj.type.toUpperCase()
+      const tag = logObj.tag ? `[${logObj.tag}] ` : ''
+      const message = logObj.args
+        .map((arg) =>
+          typeof arg === 'string' ? arg : inspect(arg, { depth: 5 })
+        )
+        .join(' ')
+      fileStream.write(`${date} [${type}] ${tag}${message}\n`)
+    },
+  }
+
+  const defaultReporter = logger.options.reporters[0]
+
+  const consoleReporter: ConsolaReporter = {
+    log(logObj, ctx) {
+      if (logObj.level <= 4) {
+        defaultReporter.log(logObj, ctx)
+      }
+    },
+  }
+
+  logger.setReporters([consoleReporter, fileReporter])
+}
