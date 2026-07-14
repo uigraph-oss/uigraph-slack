@@ -1,5 +1,6 @@
 import type { webApi } from '@slack/bolt'
 import { App } from '@slack/bolt'
+import type { ModelMessage } from 'ai'
 import { inspect } from 'node:util'
 import { answer } from './agent/respond'
 import { env } from './env'
@@ -7,6 +8,7 @@ import { logger } from './logger'
 import { closeMcp, initMcp } from './mcp/client'
 import { formatForSlack } from './slack/format'
 import { buildMessages } from './slack/messages'
+import { buildTurnMetadata } from './slack/metadata'
 import type { SlackMessage } from './types'
 
 const app = new App({
@@ -19,7 +21,7 @@ async function answerThread(
   slackMessages: SlackMessage[],
   botUserId: string | undefined,
   client: webApi.WebClient
-): Promise<string> {
+): Promise<{ text: string; responseMessages: ModelMessage[] }> {
   const messages = await buildMessages(
     slackMessages.slice(-env.LLM_MESSAGES_LIMIT),
     botUserId,
@@ -37,15 +39,20 @@ app.event('app_mention', async ({ event, say, client, context }) => {
     const thread = await client.conversations.replies({
       channel: event.channel,
       ts: threadTs,
+      include_all_metadata: true,
     })
 
-    const reply = await answerThread(
+    const { text, responseMessages } = await answerThread(
       thread.messages ?? [],
       context.botUserId,
       client
     )
-    const formatted = formatForSlack(reply)
-    await say({ text: formatted.message, thread_ts: threadTs })
+    const formatted = formatForSlack(text)
+    await say({
+      text: formatted.message,
+      thread_ts: threadTs,
+      metadata: buildTurnMetadata(responseMessages),
+    })
 
     if (formatted.assets.length > 0) {
       logger
@@ -113,28 +120,36 @@ app.event('message', async ({ event, say, client, context }) => {
   logger.withTag('slack').info(`DM from ${event.user} in ${event.channel}`)
 
   try {
-    let reply: string
+    let text: string
+    let responseMessages: ModelMessage[]
     if (threadTs) {
       const before = await client.conversations.history({
         channel: event.channel,
         latest: threadTs,
         inclusive: true,
         limit: 20,
+        include_all_metadata: true,
       })
       const thread = await client.conversations.replies({
         channel: event.channel,
         ts: threadTs,
+        include_all_metadata: true,
       })
       const slackMessages = [
         ...(before.messages ?? []).reverse(),
         ...(thread.messages ?? []).slice(1),
       ]
 
-      reply = await answerThread(slackMessages, context.botUserId, client)
+      ;({ text, responseMessages } = await answerThread(
+        slackMessages,
+        context.botUserId,
+        client
+      ))
     } else {
       const history = await client.conversations.history({
         channel: event.channel,
         limit: 20,
+        include_all_metadata: true,
       })
       const slackMessages = (history.messages ?? [])
         .reverse()
@@ -144,11 +159,15 @@ app.event('message', async ({ event, say, client, context }) => {
         context.botUserId,
         client
       )
-      reply = await answer(messages)
+      ;({ text, responseMessages } = await answer(messages))
     }
 
-    const formatted = formatForSlack(reply)
-    await say({ text: formatted.message, thread_ts: threadTs })
+    const formatted = formatForSlack(text)
+    await say({
+      text: formatted.message,
+      thread_ts: threadTs,
+      metadata: buildTurnMetadata(responseMessages),
+    })
 
     if (formatted.assets.length > 0) {
       logger

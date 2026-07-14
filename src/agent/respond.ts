@@ -6,7 +6,9 @@ import { resolveAiModel } from '@/provider/ai-sdk'
 import { generateText, stepCountIs, type ModelMessage } from 'ai'
 import { inspect } from 'node:util'
 
-export async function answer(messages: ModelMessage[]): Promise<string> {
+export async function answer(
+  messages: ModelMessage[]
+): Promise<{ text: string; responseMessages: ModelMessage[] }> {
   const log = logger.withTag('agent')
   log.info(`Answering thread with ${messages.length} message(s)`)
   log.verbose(`Messages: ${inspect(messages, { depth: null })}`)
@@ -33,5 +35,5 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
   }
 
   log.verbose('Result:', inspect(result, { depth: null }))
-  return result.text
+  return { text: result.text, responseMessages: result.response.messages }
 }

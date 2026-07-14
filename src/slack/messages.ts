@@ -1,5 +1,6 @@
 import { env } from '@/env'
 import { logger } from '@/logger'
+import { readTurnMessages } from '@/slack/metadata'
 import { resolveUserName } from '@/slack/user'
 import type { SlackMessage } from '@/types'
 import type { webApi } from '@slack/bolt'
@@ -27,6 +28,11 @@ export async function buildMessages(
     const isBot = message.bot_id !== undefined || message.user === botUserId
 
     if (isBot) {
+      const storedMessages = readTurnMessages(message)
+      if (storedMessages !== undefined) {
+        messages.push(...storedMessages)
+        continue
+      }
       if (text === '') {
         continue
       }
