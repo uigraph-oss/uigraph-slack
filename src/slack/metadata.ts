@@ -2,6 +2,7 @@ import { logger } from '@/logger'
 import type { SlackMessage } from '@/types'
 import type { webApi } from '@slack/bolt'
 import type { ModelMessage } from 'ai'
+import { inspect } from 'node:util'
 
 export const AGENT_TURN_EVENT_TYPE = 'uigraph_agent_turn'
 
@@ -27,6 +28,11 @@ export function buildTurnMetadata(
     return undefined
   }
 
+  logger
+    .withTag('slack')
+    .verbose(
+      `Turn metadata (${size} chars): ${inspect(metadata, { depth: null })}`
+    )
   return metadata as unknown as PostMetadata
 }
 
@@ -46,5 +52,10 @@ export function readTurnMessages(
     return undefined
   }
 
+  logger
+    .withTag('slack')
+    .verbose(
+      `Restored ${messages.length} message(s) from turn metadata: ${inspect(messages, { depth: null })}`
+    )
   return messages as ModelMessage[]
 }
