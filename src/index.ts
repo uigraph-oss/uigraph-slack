@@ -48,11 +48,16 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       client
     )
     const formatted = formatForSlack(text)
-    await say({
+    const posted = await say({
       text: formatted.message,
       thread_ts: threadTs,
       metadata: buildTurnMetadata(toolOutputs),
     })
+    logger
+      .withTag('slack')
+      .verbose(
+        `Posted message metadata echo: ${inspect((posted as { message?: { metadata?: unknown } }).message?.metadata, { depth: null })}`
+      )
 
     if (formatted.assets.length > 0) {
       logger
@@ -157,11 +162,16 @@ app.event('message', async ({ event, say, client, context }) => {
 
     const { text, toolOutputs } = await answer(messages)
     const formatted = formatForSlack(text)
-    await say({
+    const posted = await say({
       text: formatted.message,
       thread_ts: threadTs,
       metadata: buildTurnMetadata(toolOutputs),
     })
+    logger
+      .withTag('slack')
+      .verbose(
+        `Posted message metadata echo: ${inspect((posted as { message?: { metadata?: unknown } }).message?.metadata, { depth: null })}`
+      )
 
     if (formatted.assets.length > 0) {
       logger
