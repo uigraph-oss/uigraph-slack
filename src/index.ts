@@ -86,7 +86,8 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       thread_ts: threadTs,
     })
 
-    logger.withTag('slack').error(inspect(error, { depth: null }))
+    logger.withTag('slack').error(error)
+    logger.withTag('slack').verbose(inspect(error, { depth: null }))
   }
 })
 

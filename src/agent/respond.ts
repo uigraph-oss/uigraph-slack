@@ -9,8 +9,7 @@ import { inspect } from 'node:util'
 export async function answer(messages: ModelMessage[]): Promise<string> {
   const log = logger.withTag('agent')
   log.info(`Answering thread with ${messages.length} message(s)`)
-
-  log.info(`Messages: ${inspect(messages, { depth: null })}`)
+  log.verbose(`Messages: ${inspect(messages, { depth: null })}`)
 
   const result = await generateText({
     model: await resolveAiModel(),
@@ -22,12 +21,12 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
 
   for (const step of result.steps) {
     for (const call of step.toolCalls) {
-      log.info(
+      log.trace(
         `MCP ${call.toolName} input: ${inspect(call.input, { depth: null })}`
       )
     }
     for (const toolResult of step.toolResults) {
-      log.info(
+      log.verbose(
         `MCP ${toolResult.toolName} output: ${inspect(toolResult.output, { depth: null })}`
       )
     }
