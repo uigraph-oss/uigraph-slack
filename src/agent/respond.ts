@@ -8,7 +8,7 @@ import { inspect } from 'node:util'
 
 export async function answer(
   messages: ModelMessage[]
-): Promise<{ text: string; responseMessages: ModelMessage[] }> {
+): Promise<{ text: string; toolOutputs: unknown[] }> {
   const log = logger.withTag('agent')
   log.info(`Answering thread with ${messages.length} message(s)`)
   log.verbose(`Messages: ${inspect(messages, { depth: null })}`)
@@ -34,6 +34,10 @@ export async function answer(
     }
   }
 
+  const toolOutputs = result.steps.flatMap((step) =>
+    step.toolResults.map((toolResult) => toolResult.output)
+  )
+
   log.verbose('Result:', inspect(result, { depth: null }))
-  return { text: result.text, responseMessages: result.responseMessages }
+  return { text: result.text, toolOutputs }
 }

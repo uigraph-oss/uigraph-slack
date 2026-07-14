@@ -21,7 +21,7 @@ async function answerThread(
   slackMessages: SlackMessage[],
   botUserId: string | undefined,
   client: webApi.WebClient
-): Promise<{ text: string; responseMessages: ModelMessage[] }> {
+): Promise<{ text: string; toolOutputs: unknown[] }> {
   const messages = await buildMessages(
     slackMessages.slice(-env.LLM_MESSAGES_LIMIT),
     botUserId,
@@ -42,7 +42,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       include_all_metadata: true,
     })
 
-    const { text, responseMessages } = await answerThread(
+    const { text, toolOutputs } = await answerThread(
       thread.messages ?? [],
       context.botUserId,
       client
@@ -51,7 +51,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
     await say({
       text: formatted.message,
       thread_ts: threadTs,
-      metadata: buildTurnMetadata(responseMessages),
+      metadata: buildTurnMetadata(toolOutputs),
     })
 
     if (formatted.assets.length > 0) {
@@ -155,12 +155,12 @@ app.event('message', async ({ event, say, client, context }) => {
       messages = await buildMessages(slackMessages, context.botUserId, client)
     }
 
-    const { text, responseMessages } = await answer(messages)
+    const { text, toolOutputs } = await answer(messages)
     const formatted = formatForSlack(text)
     await say({
       text: formatted.message,
       thread_ts: threadTs,
-      metadata: buildTurnMetadata(responseMessages),
+      metadata: buildTurnMetadata(toolOutputs),
     })
 
     if (formatted.assets.length > 0) {

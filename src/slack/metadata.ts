@@ -1,7 +1,6 @@
 import { logger } from '@/logger'
 import type { SlackMessage } from '@/types'
 import type { webApi } from '@slack/bolt'
-import type { ModelMessage } from 'ai'
 import { inspect } from 'node:util'
 
 export const AGENT_TURN_EVENT_TYPE = 'uigraph_agent_turn'
@@ -11,11 +10,15 @@ const METADATA_CHAR_LIMIT = 12000
 type PostMetadata = NonNullable<webApi.ChatPostMessageArguments['metadata']>
 
 export function buildTurnMetadata(
-  responseMessages: ModelMessage[]
+  toolOutputs: unknown[]
 ): PostMetadata | undefined {
+  if (toolOutputs.length === 0) {
+    return undefined
+  }
+
   const metadata = {
     event_type: AGENT_TURN_EVENT_TYPE,
-    event_payload: { messages: responseMessages },
+    event_payload: { toolOutputs },
   }
 
   const size = JSON.stringify(metadata).length
@@ -36,9 +39,7 @@ export function buildTurnMetadata(
   return metadata as unknown as PostMetadata
 }
 
-export function readTurnMessages(
-  message: SlackMessage
-): ModelMessage[] | undefined {
+export function readToolOutputs(message: SlackMessage): unknown[] | undefined {
   const metadata = message.metadata
   if (metadata === undefined) {
     return undefined
@@ -47,15 +48,15 @@ export function readTurnMessages(
     return undefined
   }
 
-  const messages = metadata.event_payload?.messages
-  if (!Array.isArray(messages)) {
+  const toolOutputs = metadata.event_payload?.toolOutputs
+  if (!Array.isArray(toolOutputs)) {
     return undefined
   }
 
   logger
     .withTag('slack')
     .verbose(
-      `Restored ${messages.length} message(s) from turn metadata: ${inspect(messages, { depth: null })}`
+      `Restored ${toolOutputs.length} tool output(s) from turn metadata: ${inspect(toolOutputs, { depth: null })}`
     )
-  return messages as ModelMessage[]
+  return toolOutputs
 }
