@@ -33,6 +33,6 @@ export async function answer(messages: ModelMessage[]): Promise<string> {
     }
   }
 
-  log.success('Result:', inspect(result, { depth: null }))
+  log.verbose('Result:', inspect(result, { depth: null }))
   return result.text
 }
