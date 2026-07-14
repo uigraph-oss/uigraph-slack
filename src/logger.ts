@@ -5,7 +5,7 @@ import { inspect } from 'node:util'
 import { env } from './env'
 
 export const logger = createConsola({
-  level: env.SLACK_BOT_DEBUG_MODE ? 5 : 0,
+  level: env.SLACK_BOT_DEBUG_MODE ? 999 : 0,
 })
 
 if (env.SLACK_BOT_DEBUG_MODE) {
@@ -30,5 +30,15 @@ if (env.SLACK_BOT_DEBUG_MODE) {
     },
   }
 
-  logger.addReporter(fileReporter)
+  const defaultReporter = logger.options.reporters[0]
+
+  const consoleReporter: ConsolaReporter = {
+    log(logObj, ctx) {
+      if (logObj.level <= 5) {
+        defaultReporter.log(logObj, ctx)
+      }
+    },
+  }
+
+  logger.setReporters([consoleReporter, fileReporter])
 }
