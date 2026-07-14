@@ -35,6 +35,12 @@ app.event('app_mention', async ({ event, say, client, context }) => {
 
   logger.withTag('slack').info(`Mention from ${event.user} in ${event.channel}`)
 
+  await client.reactions.add({
+    channel: event.channel,
+    timestamp: event.ts,
+    name: 'eyes',
+  })
+
   try {
     const thread = await client.conversations.replies({
       channel: event.channel,
@@ -48,6 +54,13 @@ app.event('app_mention', async ({ event, say, client, context }) => {
       client
     )
     const formatted = formatForSlack(text)
+
+    await client.reactions.remove({
+      channel: event.channel,
+      timestamp: event.ts,
+      name: 'eyes',
+    })
+
     const posted = await say({
       text: formatted.message,
       thread_ts: threadTs,
@@ -93,6 +106,14 @@ app.event('app_mention', async ({ event, say, client, context }) => {
 
     logger.withTag('slack').success(`Replied in thread ${threadTs}`)
   } catch (error) {
+    await client.reactions
+      .remove({
+        channel: event.channel,
+        timestamp: event.ts,
+        name: 'eyes',
+      })
+      .catch(() => {})
+
     await say({
       text: 'Sorry, I hit an error answering that.',
       thread_ts: threadTs,
@@ -123,6 +144,12 @@ app.event('message', async ({ event, say, client, context }) => {
   const threadTs = event.thread_ts
 
   logger.withTag('slack').info(`DM from ${event.user} in ${event.channel}`)
+
+  await client.reactions.add({
+    channel: event.channel,
+    timestamp: event.ts,
+    name: 'eyes',
+  })
 
   try {
     let messages: ModelMessage[]
@@ -162,6 +189,13 @@ app.event('message', async ({ event, say, client, context }) => {
 
     const { text, toolOutputs } = await answer(messages)
     const formatted = formatForSlack(text)
+
+    await client.reactions.remove({
+      channel: event.channel,
+      timestamp: event.ts,
+      name: 'eyes',
+    })
+
     const posted = await say({
       text: formatted.message,
       thread_ts: threadTs,
@@ -216,6 +250,14 @@ app.event('message', async ({ event, say, client, context }) => {
 
     logger.withTag('slack').success(`Replied in DM ${event.channel}`)
   } catch (error) {
+    await client.reactions
+      .remove({
+        channel: event.channel,
+        timestamp: event.ts,
+        name: 'eyes',
+      })
+      .catch(() => {})
+
     await say({
       text: 'Sorry, I hit an error answering that.',
       thread_ts: threadTs,
