@@ -1,5 +1,5 @@
-import { App } from '@slack/bolt'
 import type { webApi } from '@slack/bolt'
+import { App } from '@slack/bolt'
 import { inspect } from 'node:util'
 import { answer } from './agent/respond'
 import { env } from './env'
