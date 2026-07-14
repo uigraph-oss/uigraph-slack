@@ -5,7 +5,7 @@ import { inspect } from 'node:util'
 import { env } from './env'
 
 export const logger = createConsola({
-  level: env.SLACK_BOT_DEBUG_MODE ? 999 : 0,
+  level: env.SLACK_BOT_DEBUG_MODE ? 5 : 0,
 })
 
 if (env.SLACK_BOT_DEBUG_MODE) {
