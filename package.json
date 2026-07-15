@@ -58,6 +58,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "@slack/bolt": "^4.7.3",
+    "@uigraph/ai-sdk": "file:../uigraph-ai-sdk",
     "ai": "^7.0.22",
     "ai-gateway-provider": "^3.2.0",
     "ai-sdk-ollama": "^4.0.0",
