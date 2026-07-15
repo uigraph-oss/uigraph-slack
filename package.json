@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@slack/bolt": "^4.7.3",
-    "@uigraph/ai-sdk": "file:../uigraph-ai-sdk",
+    "@uigraph/ai-sdk": "^1.0.0",
     "ai": "^7.0.22",
     "consola": "^3.4.2",
     "slackify-markdown": "^5.0.0",
