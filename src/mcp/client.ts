@@ -1,33 +1,25 @@
 import { env } from '@/env'
 import { logger } from '@/logger'
-import { createMCPClient } from '@ai-sdk/mcp'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { connectMcpTools, type McpClient } from '@uigraph/ai-sdk'
 import type { ToolSet } from 'ai'
 
-type MCPClient = Awaited<ReturnType<typeof createMCPClient>>
-
-let mcpClient: MCPClient | undefined
+let mcpClient: McpClient | undefined
 let uigraphTools: ToolSet | undefined
 
 export async function initMcp(): Promise<ToolSet> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${env.UIGRAPH_ACCESS_TOKEN}`,
-    'X-UIGraph-Org-Id': env.UIGRAPH_ORG_ID,
-  }
-
-  const transport = new StreamableHTTPClientTransport(
-    new URL(env.UIGRAPH_MCP_URL),
-    {
-      requestInit: { headers },
-    }
-  )
-
   logger
     .withTag('mcp')
     .info(`Connecting to MCP server at ${env.UIGRAPH_MCP_URL}`)
 
-  mcpClient = await createMCPClient({ transport })
-  uigraphTools = await mcpClient.tools()
+  const { client, tools } = await connectMcpTools({
+    url: env.UIGRAPH_MCP_URL,
+    orgId: env.UIGRAPH_ORG_ID,
+    accessToken: env.UIGRAPH_ACCESS_TOKEN,
+    authType: 'service-account',
+  })
+
+  mcpClient = client
+  uigraphTools = tools
 
   logger
     .withTag('mcp')
