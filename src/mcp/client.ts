@@ -15,6 +15,7 @@ export async function initMcp(): Promise<ToolSet> {
     url: env.UIGRAPH_MCP_URL,
     orgId: env.UIGRAPH_ORG_ID,
     accessToken: env.UIGRAPH_ACCESS_TOKEN,
+    authType: 'service-account',
   })
 
   mcpClient = client
