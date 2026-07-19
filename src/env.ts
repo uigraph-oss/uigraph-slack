@@ -31,3 +31,7 @@ const envSchema = z.object({
 })
 
 export const env = envSchema.parse(process.env)
+
+if (!env.AI_PROVIDER_NPM && !env.AI_PROVIDER_API_URL) {
+  throw new Error('AI provider is not configured')
+}
