@@ -11,8 +11,8 @@ importers:
         specifier: ^4.7.3
         version: 4.7.3(@types/express@5.0.6)
       '@uigraph/ai-sdk':
-        specifier: ^1.0.1
-        version: 1.0.1(ai@7.0.22(zod@4.4.3))
+        specifier: ^1.0.2
+        version: 1.0.2(ai@7.0.22(zod@4.4.3))
       ai:
         specifier: ^7.0.22
         version: 7.0.22(zod@4.4.3)
@@ -928,10 +928,10 @@ packages:
       }
     engines: { node: ^18.18.0 || ^20.9.0 || >=21.1.0 }
 
-  '@uigraph/ai-sdk@1.0.1':
+  '@uigraph/ai-sdk@1.0.2':
     resolution:
       {
-        integrity: sha512-WgJAMv32BrqJMb9oxPWWz3/DMs3Nmk3MoLFDZXQKq8LsUPuyUUjKNDVLkrzyaZnrahRHbZcnqusGOR9WpTMIgQ==,
+        integrity: sha512-8Ltq0aLJT48XvaozOtfCm0UzWzfVT2ftiyVFx4H3WYyNfgrNuRMPQ56KEcNhIjyedaYlE/whfagZYlGKbNp/WQ==,
       }
     peerDependencies:
       ai: ^7.0.22
@@ -4380,7 +4380,7 @@ snapshots:
       '@typescript-eslint/types': 8.63.0
       eslint-visitor-keys: 5.0.1
 
-  '@uigraph/ai-sdk@1.0.1(ai@7.0.22(zod@4.4.3))':
+  '@uigraph/ai-sdk@1.0.2(ai@7.0.22(zod@4.4.3))':
     dependencies:
       ai: 7.0.22(zod@4.4.3)
 

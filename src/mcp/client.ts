@@ -17,6 +17,7 @@ export async function initMcp(): Promise<ToolSet> {
         url: env.UIGRAPH_MCP_URL,
         accessToken: env.UIGRAPH_ACCESS_TOKEN,
         authType: 'service_account',
+        clientName: 'UiGraph Slack',
       })
 
       mcpClient = client
