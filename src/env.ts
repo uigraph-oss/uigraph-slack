@@ -9,7 +9,6 @@ const envSchema = z.object({
   UIGRAPH_API_URL: z.url(),
   UIGRAPH_MCP_URL: z.url(),
 
-  UIGRAPH_ORG_ID: z.string(),
   UIGRAPH_ACCESS_TOKEN: z.string(),
 
   AI_PROVIDER_NPM: z.string().default('@ai-sdk/openai-compatible'),

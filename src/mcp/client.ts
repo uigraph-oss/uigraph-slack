@@ -11,23 +11,39 @@ export async function initMcp(): Promise<ToolSet> {
     .withTag('mcp')
     .info(`Connecting to MCP server at ${env.UIGRAPH_MCP_URL}`)
 
-  const { client, tools } = await connectMcpTools({
-    url: env.UIGRAPH_MCP_URL,
-    orgId: env.UIGRAPH_ORG_ID,
-    accessToken: env.UIGRAPH_ACCESS_TOKEN,
-    authType: 'service-account',
-  })
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    try {
+      const { client, tools } = await connectMcpTools({
+        url: env.UIGRAPH_MCP_URL,
+        accessToken: env.UIGRAPH_ACCESS_TOKEN,
+        authType: 'service_account',
+      })
 
-  mcpClient = client
-  uigraphTools = tools
+      mcpClient = client
+      uigraphTools = tools
 
-  logger
-    .withTag('mcp')
-    .success(
-      `Loaded ${Object.keys(uigraphTools).length} tools: ${Object.keys(uigraphTools).join(', ')}`
-    )
+      logger
+        .withTag('mcp')
+        .success(
+          `Loaded ${Object.keys(uigraphTools).length} tools: ${Object.keys(uigraphTools).join(', ')}`
+        )
 
-  return uigraphTools
+      return uigraphTools
+    } catch (error) {
+      if (attempt === 10) {
+        throw error
+      }
+
+      logger
+        .withTag('mcp')
+        .warn(`MCP connection failed; retrying (${attempt}/10)`)
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 1000)
+      })
+    }
+  }
+
+  throw new Error('MCP connection failed.')
 }
 
 export function getTools(): ToolSet {
