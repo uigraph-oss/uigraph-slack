@@ -22,7 +22,7 @@ const envSchema = z.object({
   AI_PROVIDER_API_KEY: z.string(),
   AI_PROVIDER_MODEL: z.string(),
 
-  LLM_MAX_STEP: z.coerce.number().default(25),
+  LLM_MAX_STEP: z.coerce.number().default(100),
   LLM_MESSAGES_LIMIT: z.coerce.number().default(25),
 
   LLM_ATTACHMENT_IMAGE: z.stringbool().default(false),
