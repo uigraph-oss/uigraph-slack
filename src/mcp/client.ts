@@ -15,7 +15,7 @@ export async function initMcp(): Promise<ToolSet> {
     try {
       const { client, tools } = await connectMcpTools({
         url: env.UIGRAPH_MCP_URL,
-        accessToken: env.UIGRAPH_ACCESS_TOKEN,
+        accessToken: env.UIGRAPH_TOKEN,
         authType: 'service_account',
         clientName: 'UiGraph Slack',
       })
