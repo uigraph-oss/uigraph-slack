@@ -33,8 +33,6 @@ const socketSchema = sharedSchema.extend({
 
 const httpSchema = sharedSchema.extend({
   SLACK_SIGNING_SECRET: z.string(),
-  SLACK_CLIENT_ID: z.string(),
-  SLACK_CLIENT_SECRET: z.string(),
   UIGRAPH_ENTERPRISE_INTERNAL_TOKEN: z.string(),
 })
 
