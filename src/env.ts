@@ -39,18 +39,15 @@ const httpSchema = sharedSchema.extend({
 })
 
 function loadEnv() {
-  const hasBotToken = Boolean(process.env.SLACK_BOT_TOKEN)
-  const hasAppToken = Boolean(process.env.SLACK_APP_TOKEN)
+  const enterprise = z
+    .stringbool()
+    .default(false)
+    .parse(process.env.UIGRAPH_ENTERPRISE)
 
-  if (hasBotToken && hasAppToken) {
-    return { mode: 'socket' as const, ...socketSchema.parse(process.env) }
+  if (enterprise) {
+    return { mode: 'http' as const, ...httpSchema.parse(process.env) }
   }
-  if (hasBotToken || hasAppToken) {
-    throw new Error(
-      'Socket mode requires both SLACK_BOT_TOKEN and SLACK_APP_TOKEN; for HTTP mode unset both'
-    )
-  }
-  return { mode: 'http' as const, ...httpSchema.parse(process.env) }
+  return { mode: 'socket' as const, ...socketSchema.parse(process.env) }
 }
 
 export const env = loadEnv()
