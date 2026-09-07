@@ -1,14 +1,13 @@
 import { SLACK_BOT_SYSTEM_PROMPT } from '@/constants/system-prompt'
 import { env } from '@/env'
 import { logger } from '@/logger'
-import { getTools } from '@/mcp/client'
 import { resolveAiModel } from '@/provider/ai-sdk'
-import { generateText, stepCountIs, type ModelMessage } from 'ai'
+import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 import { inspect } from 'node:util'
 
 export async function answer(
   messages: ModelMessage[],
-  teamId: string | undefined
+  tools: ToolSet
 ): Promise<{ text: string; toolOutputs: string[] }> {
   const log = logger.withTag('agent')
   log.info(`Answering thread with ${messages.length} message(s)`)
@@ -16,7 +15,7 @@ export async function answer(
 
   const result = await generateText({
     model: await resolveAiModel(),
-    tools: await getTools(teamId),
+    tools,
     stopWhen: stepCountIs(env.LLM_MAX_STEP),
     system: SLACK_BOT_SYSTEM_PROMPT,
     messages,

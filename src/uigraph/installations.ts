@@ -1,4 +1,4 @@
-import { env } from '@/env'
+import { env, requireMode } from '@/env'
 import { logger } from '@/logger'
 
 export type SlackInstallation = {
@@ -14,10 +14,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000
 const cache = new Map<string, { value: SlackInstallation; expiresAt: number }>()
 
 function internalHeaders(): Record<string, string> {
-  if (env.mode !== 'http') {
-    throw new Error('Installation lookup is only available in HTTP mode')
+  return {
+    'X-Internal-Token': requireMode('http').UIGRAPH_ENTERPRISE_INTERNAL_TOKEN,
   }
-  return { 'X-Internal-Token': env.UIGRAPH_ENTERPRISE_INTERNAL_TOKEN }
 }
 
 function installationUrl(teamId: string): string {

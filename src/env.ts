@@ -52,6 +52,17 @@ function loadEnv() {
 
 export const env = loadEnv()
 
+export type Env = typeof env
+
+export function requireMode<M extends Env['mode']>(
+  mode: M
+): Extract<Env, { mode: M }> {
+  if (env.mode !== mode) {
+    throw new Error(`Expected ${mode} mode but running in ${env.mode} mode`)
+  }
+  return env as Extract<Env, { mode: M }>
+}
+
 if (!env.AI_PROVIDER_NPM && !env.AI_PROVIDER_API_URL) {
   throw new Error('AI provider is not configured')
 }
