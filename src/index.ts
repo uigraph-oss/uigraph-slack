@@ -5,33 +5,103 @@ import { inspect } from 'node:util'
 import { answer } from './agent/respond'
 import { env } from './env'
 import { logger } from './logger'
-import { closeMcp, initMcp } from './mcp/client'
+import { closeMcp, closeTeamMcp, initMcp } from './mcp/client'
 import { formatForSlack } from './slack/format'
 import { buildMessages } from './slack/messages'
 import { buildTurnMetadata } from './slack/metadata'
-import type { SlackMessage } from './types'
+import type { SlackMessage, TurnContext } from './types'
+import {
+  evictInstallation,
+  getInstallation,
+  removeInstallation,
+} from './uigraph/installations'
 
-const app = new App({
-  token: env.SLACK_BOT_TOKEN,
-  appToken: env.SLACK_APP_TOKEN,
-  socketMode: true,
-})
+function createApp(): App {
+  if (env.mode === 'socket') {
+    return new App({
+      token: env.SLACK_BOT_TOKEN,
+      appToken: env.SLACK_APP_TOKEN,
+      socketMode: true,
+    })
+  }
+
+  return new App({
+    signingSecret: env.SLACK_SIGNING_SECRET,
+    authorize: async ({ teamId }) => {
+      if (teamId === undefined) {
+        throw new Error('Slack event without team id is not supported')
+      }
+      const installation = await getInstallation(teamId)
+      if (installation === undefined) {
+        throw new Error(`Slack team ${teamId} is not connected to UiGraph`)
+      }
+      return {
+        botToken: installation.botToken,
+        botUserId: installation.botUserId,
+        teamId: installation.teamId,
+      }
+    },
+  })
+}
+
+const app = createApp()
+
+function turnFromContext(
+  client: webApi.WebClient,
+  context: { teamId?: string; botUserId?: string; botToken?: string }
+): TurnContext {
+  return {
+    client,
+    teamId: context.teamId,
+    botUserId: context.botUserId,
+    botToken: context.botToken,
+  }
+}
 
 async function answerThread(
   slackMessages: SlackMessage[],
-  botUserId: string | undefined,
-  client: webApi.WebClient
+  turn: TurnContext
 ): Promise<{ text: string; toolOutputs: string[] }> {
   const messages = await buildMessages(
     slackMessages.slice(-env.LLM_MESSAGES_LIMIT),
-    botUserId,
-    client
+    turn
   )
-  return answer(messages)
+  return answer(messages, turn.teamId)
+}
+
+async function forgetTeam(teamId: string | undefined): Promise<void> {
+  if (teamId === undefined) {
+    logger.withTag('slack').warn('Uninstall event without team id')
+    return
+  }
+  logger.withTag('slack').info(`App removed from team ${teamId}`)
+  evictInstallation(teamId)
+  await closeTeamMcp(teamId)
+  try {
+    await removeInstallation(teamId)
+  } catch (error) {
+    logger
+      .withTag('slack')
+      .error(`Failed to remove installation for team ${teamId}`, error)
+  }
+}
+
+if (env.mode === 'http') {
+  app.event('app_uninstalled', async ({ context }) => {
+    await forgetTeam(context.teamId)
+  })
+
+  app.event('tokens_revoked', async ({ event, context }) => {
+    if ((event.tokens.bot ?? []).length === 0) {
+      return
+    }
+    await forgetTeam(context.teamId)
+  })
 }
 
 app.event('app_mention', async ({ event, say, client, context }) => {
   const threadTs = event.thread_ts ?? event.ts
+  const turn = turnFromContext(client, context)
 
   logger.withTag('slack').info(`Mention from ${event.user} in ${event.channel}`)
 
@@ -50,8 +120,7 @@ app.event('app_mention', async ({ event, say, client, context }) => {
 
     const { text, toolOutputs } = await answerThread(
       thread.messages ?? [],
-      context.botUserId,
-      client
+      turn
     )
     const formatted = formatForSlack(text)
 
@@ -142,6 +211,7 @@ app.event('message', async ({ event, say, client, context }) => {
   }
 
   const threadTs = event.thread_ts
+  const turn = turnFromContext(client, context)
 
   logger.withTag('slack').info(`DM from ${event.user} in ${event.channel}`)
 
@@ -172,8 +242,7 @@ app.event('message', async ({ event, say, client, context }) => {
       ]
       messages = await buildMessages(
         slackMessages.slice(-env.LLM_MESSAGES_LIMIT),
-        context.botUserId,
-        client
+        turn
       )
     } else {
       const history = await client.conversations.history({
@@ -184,10 +253,10 @@ app.event('message', async ({ event, say, client, context }) => {
       const slackMessages = (history.messages ?? [])
         .reverse()
         .slice(-env.LLM_MESSAGES_LIMIT)
-      messages = await buildMessages(slackMessages, context.botUserId, client)
+      messages = await buildMessages(slackMessages, turn)
     }
 
-    const { text, toolOutputs } = await answer(messages)
+    const { text, toolOutputs } = await answer(messages, turn.teamId)
     const formatted = formatForSlack(text)
 
     await client.reactions.remove({
@@ -277,9 +346,17 @@ process.on('SIGINT', () => void shutdown())
 process.on('SIGTERM', () => void shutdown())
 
 void (async () => {
-  const tools = await initMcp()
+  if (env.mode === 'socket') {
+    const tools = await initMcp()
+    await app.start(process.env.PORT || 3000)
+    logger.success(
+      `⚡️ Bolt app is running in socket mode with ${Object.keys(tools).length} MCP tools loaded!`
+    )
+    return
+  }
+
   await app.start(process.env.PORT || 3000)
   logger.success(
-    `⚡️ Bolt app is running with ${Object.keys(tools).length} MCP tools loaded!`
+    `⚡️ Bolt app is running in HTTP mode on port ${process.env.PORT || 3000}`
   )
 })()

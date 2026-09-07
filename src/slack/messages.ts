@@ -2,15 +2,17 @@ import { env } from '@/env'
 import { logger } from '@/logger'
 import { readToolOutputs } from '@/slack/metadata'
 import { resolveUserName } from '@/slack/user'
-import type { SlackMessage } from '@/types'
-import type { webApi } from '@slack/bolt'
+import type { SlackMessage, TurnContext } from '@/types'
 import type { AssistantContent, ModelMessage, UserContent } from 'ai'
 
 export async function buildMessages(
   slackMessages: SlackMessage[],
-  botUserId: string | undefined,
-  client: webApi.WebClient
+  turn: TurnContext
 ): Promise<ModelMessage[]> {
+  const { botUserId, client, teamId, botToken } = turn
+  if (botToken === undefined) {
+    throw new Error('Slack bot token is missing for this turn')
+  }
   const allowedPrefixes: string[] = []
   if (env.LLM_ATTACHMENT_IMAGE) {
     allowedPrefixes.push('image/')
@@ -51,7 +53,7 @@ export async function buildMessages(
     const content: UserContent = []
     if (text !== '') {
       if (message.user) {
-        const name = await resolveUserName(client, message.user)
+        const name = await resolveUserName(client, teamId, message.user)
         content.push({
           type: 'text',
           text: `<author>${name} <${message.user}></author>\n\n${text}`,
@@ -77,7 +79,7 @@ export async function buildMessages(
       }
 
       const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+        headers: { Authorization: `Bearer ${botToken}` },
       })
       const contentType = response.headers.get('content-type') ?? ''
       if (!response.ok || !contentType.startsWith(prefix)) {

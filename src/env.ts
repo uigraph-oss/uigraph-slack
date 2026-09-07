@@ -1,15 +1,10 @@
 import { z } from 'zod'
 
-const envSchema = z.object({
+const sharedSchema = z.object({
   SLACK_BOT_DEBUG_MODE: z.stringbool().default(false),
-
-  SLACK_BOT_TOKEN: z.string(),
-  SLACK_APP_TOKEN: z.string(),
 
   UIGRAPH_API_URL: z.url(),
   UIGRAPH_MCP_URL: z.url(),
-
-  UIGRAPH_TOKEN: z.string(),
 
   AI_PROVIDER_NPM: z.string().default('@ai-sdk/openai-compatible'),
   AI_PROVIDER_OPTIONS: z
@@ -30,7 +25,35 @@ const envSchema = z.object({
   LLM_ATTACHMENT_VIDEO: z.stringbool().default(false),
 })
 
-export const env = envSchema.parse(process.env)
+const socketSchema = sharedSchema.extend({
+  SLACK_BOT_TOKEN: z.string(),
+  SLACK_APP_TOKEN: z.string(),
+  UIGRAPH_TOKEN: z.string(),
+})
+
+const httpSchema = sharedSchema.extend({
+  SLACK_SIGNING_SECRET: z.string(),
+  SLACK_CLIENT_ID: z.string(),
+  SLACK_CLIENT_SECRET: z.string(),
+  UIGRAPH_ENTERPRISE_INTERNAL_TOKEN: z.string(),
+})
+
+function loadEnv() {
+  const hasBotToken = Boolean(process.env.SLACK_BOT_TOKEN)
+  const hasAppToken = Boolean(process.env.SLACK_APP_TOKEN)
+
+  if (hasBotToken && hasAppToken) {
+    return { mode: 'socket' as const, ...socketSchema.parse(process.env) }
+  }
+  if (hasBotToken || hasAppToken) {
+    throw new Error(
+      'Socket mode requires both SLACK_BOT_TOKEN and SLACK_APP_TOKEN; for HTTP mode unset both'
+    )
+  }
+  return { mode: 'http' as const, ...httpSchema.parse(process.env) }
+}
+
+export const env = loadEnv()
 
 if (!env.AI_PROVIDER_NPM && !env.AI_PROVIDER_API_URL) {
   throw new Error('AI provider is not configured')

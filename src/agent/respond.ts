@@ -7,7 +7,8 @@ import { generateText, stepCountIs, type ModelMessage } from 'ai'
 import { inspect } from 'node:util'
 
 export async function answer(
-  messages: ModelMessage[]
+  messages: ModelMessage[],
+  teamId: string | undefined
 ): Promise<{ text: string; toolOutputs: string[] }> {
   const log = logger.withTag('agent')
   log.info(`Answering thread with ${messages.length} message(s)`)
@@ -15,7 +16,7 @@ export async function answer(
 
   const result = await generateText({
     model: await resolveAiModel(),
-    tools: getTools(),
+    tools: await getTools(teamId),
     stopWhen: stepCountIs(env.LLM_MAX_STEP),
     system: SLACK_BOT_SYSTEM_PROMPT,
     messages,
