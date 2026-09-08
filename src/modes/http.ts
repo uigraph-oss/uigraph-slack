@@ -7,7 +7,7 @@ import {
   getInstallation,
   removeInstallation,
 } from '@/uigraph/installations'
-import { App } from '@slack/bolt'
+import { App, ExpressReceiver } from '@slack/bolt'
 
 async function connectTeam(teamId: string): Promise<McpConnection> {
   const installation = await getInstallation(teamId)
@@ -66,8 +66,15 @@ export async function createHttpRuntime(): Promise<Runtime> {
     }
   }
 
-  const app = new App({
+  const receiver = new ExpressReceiver({
     signingSecret: env.SLACK_SIGNING_SECRET,
+  })
+  receiver.router.get('/healthz', (_req, res) => {
+    res.status(200).send('ok')
+  })
+
+  const app = new App({
+    receiver,
     authorize: async ({ teamId }) => {
       if (teamId === undefined) {
         throw new Error('Slack event without team id is not supported')
