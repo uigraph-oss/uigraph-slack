@@ -31,9 +31,27 @@ const socketSchema = sharedSchema.extend({
   UIGRAPH_TOKEN: z.string(),
 })
 
+// Per-user connection (optional). Set UIGRAPH_OAUTH_CLIENT_ID to turn it on: each Slack user then
+// approves their own UIGraph account once and the app acts as them. Left unset, HTTP mode keeps
+// using the workspace's service account as before.
+const userOAuthSchema = z.object({
+  UIGRAPH_OAUTH_CLIENT_ID: z.string().min(1),
+  // This app's public address; /uigraph/callback is registered with the OAuth client.
+  SLACK_APP_PUBLIC_URL: z.url(),
+  // The MCP server's public address, which each grant is bound to.
+  UIGRAPH_MCP_PUBLIC_URL: z.url(),
+  // Where people open UIGraph, for watch links.
+  UIGRAPH_FRONTEND_URL: z.url(),
+  // Consent page, when it is not UIGRAPH_FRONTEND_URL + /oauth/consent.
+  UIGRAPH_OAUTH_AUTHORIZE_URL: z.url().optional(),
+  // Seals the connect link and OAuth state; defaults to the Slack signing secret.
+  SLACK_APP_STATE_SECRET: z.string().min(16).optional(),
+})
+
 const httpSchema = sharedSchema.extend({
   SLACK_SIGNING_SECRET: z.string(),
   UIGRAPH_ENTERPRISE_INTERNAL_TOKEN: z.string(),
+  UIGRAPH_OAUTH_CLIENT_ID: z.string().optional(),
 })
 
 function loadEnv() {
@@ -43,7 +61,11 @@ function loadEnv() {
     .parse(process.env.UIGRAPH_ENTERPRISE)
 
   if (enterprise) {
-    return { mode: 'http' as const, ...httpSchema.parse(process.env) }
+    const http = httpSchema.parse(process.env)
+    const userOAuth = http.UIGRAPH_OAUTH_CLIENT_ID
+      ? userOAuthSchema.parse(process.env)
+      : undefined
+    return { mode: 'http' as const, ...http, userOAuth }
   }
   return { mode: 'socket' as const, ...socketSchema.parse(process.env) }
 }

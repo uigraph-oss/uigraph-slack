@@ -5,6 +5,8 @@ export type TurnContext = {
   teamId: string | undefined
   botUserId: string | undefined
   botToken: string | undefined
+  // The Slack user whose message is being answered, when answers are per user.
+  askerId?: string
 }
 
 export type SlackMessage = NonNullable<

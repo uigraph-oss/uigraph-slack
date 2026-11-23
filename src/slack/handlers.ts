@@ -5,27 +5,108 @@ import type { Runtime } from '@/runtime'
 import { formatForSlack } from '@/slack/format'
 import { buildMessages } from '@/slack/messages'
 import { buildTurnMetadata } from '@/slack/metadata'
+import { createdVideoIds, uploadWhenRendered, watchUrl } from '@/slack/video'
 import type { TurnContext } from '@/types'
+import { NotConnectedError } from '@/uigraph/user-links'
 import type { webApi } from '@slack/bolt'
 import type { ModelMessage } from 'ai'
 import { inspect } from 'node:util'
 
 function turnFromContext(
   client: webApi.WebClient,
-  context: { teamId?: string; botUserId?: string; botToken?: string }
+  context: { teamId?: string; botUserId?: string; botToken?: string },
+  askerId?: string
 ): TurnContext {
   return {
     client,
     teamId: context.teamId,
     botUserId: context.botUserId,
     botToken: context.botToken,
+    askerId,
   }
 }
 
-export function registerHandlers({ app, getTools }: Runtime): void {
+// A Slack user who has not connected a UIGraph account gets a link to do it, and nothing else.
+// In a channel it is shown only to them.
+async function promptToConnect(
+  runtime: Runtime,
+  client: webApi.WebClient,
+  where: {
+    teamId: string | undefined
+    channel: string
+    user: string
+    threadTs: string | undefined
+    direct: boolean
+  }
+): Promise<void> {
+  const url = where.teamId
+    ? runtime.connectUrl?.(where.teamId, where.user)
+    : undefined
+  const text =
+    url === undefined
+      ? 'Sorry, I could not start connecting your UIGraph account.'
+      : `Connect your UIGraph account first: <${url}|Connect UIGraph>. It takes a moment, and after that I answer with your own access.`
+  if (where.direct) {
+    await client.chat.postMessage({
+      channel: where.channel,
+      thread_ts: where.threadTs,
+      text,
+    })
+    return
+  }
+  await client.chat.postEphemeral({
+    channel: where.channel,
+    user: where.user,
+    thread_ts: where.threadTs,
+    text,
+  })
+}
+
+// A video the turn created: the watch link goes out now if the answer did not already carry it,
+// and the MP4 follows into the thread once it is rendered.
+async function deliverVideos(
+  runtime: Runtime,
+  client: webApi.WebClient,
+  turn: {
+    teamId: string | undefined
+    channel: string
+    user: string
+    threadTs: string | undefined
+    answer: string
+    toolOutputs: string[]
+  }
+): Promise<void> {
+  const { teamId, user } = turn
+  if (!runtime.showVideo || !runtime.frontendUrl || !teamId) {
+    return
+  }
+  const { showVideo, frontendUrl } = runtime
+  for (const docId of createdVideoIds(turn.toolOutputs)) {
+    if (!turn.answer.includes(docId)) {
+      await client.chat.postMessage({
+        channel: turn.channel,
+        thread_ts: turn.threadTs,
+        text: `Watch it in UIGraph: ${watchUrl(frontendUrl, docId)}`,
+      })
+    }
+    void uploadWhenRendered({
+      files: client.files,
+      channel: turn.channel,
+      threadTs: turn.threadTs,
+      docId,
+      show: (id) => showVideo(teamId, user, id),
+      log: (message) => logger.withTag('slack').warn(message),
+    }).then((result) =>
+      logger.withTag('slack').info(`Video ${docId} follow-up: ${result}`)
+    )
+  }
+}
+
+export function registerHandlers(runtime: Runtime): void {
+  const { app, getTools } = runtime
   app.event('app_mention', async ({ event, say, client, context }) => {
     const threadTs = event.thread_ts ?? event.ts
-    const turn = turnFromContext(client, context)
+    const turn = turnFromContext(client, context, event.user)
 
     logger
       .withTag('slack')
@@ -50,7 +131,7 @@ export function registerHandlers({ app, getTools }: Runtime): void {
       )
       const { text, toolOutputs } = await answer(
         messages,
-        await getTools(turn.teamId)
+        await getTools(turn.teamId, event.user)
       )
       const formatted = formatForSlack(text)
 
@@ -63,7 +144,7 @@ export function registerHandlers({ app, getTools }: Runtime): void {
       const posted = await say({
         text: formatted.message,
         thread_ts: threadTs,
-        metadata: buildTurnMetadata(toolOutputs),
+        metadata: buildTurnMetadata(toolOutputs, event.user),
       })
       logger
         .withTag('slack')
@@ -105,6 +186,17 @@ export function registerHandlers({ app, getTools }: Runtime): void {
         }
       }
 
+      if (event.user !== undefined) {
+        await deliverVideos(runtime, client, {
+          teamId: turn.teamId,
+          channel: event.channel,
+          user: event.user,
+          threadTs,
+          answer: text,
+          toolOutputs,
+        })
+      }
+
       logger.withTag('slack').success(`Replied in thread ${threadTs}`)
     } catch (error) {
       await client.reactions
@@ -114,6 +206,17 @@ export function registerHandlers({ app, getTools }: Runtime): void {
           name: 'eyes',
         })
         .catch(() => {})
+
+      if (error instanceof NotConnectedError && event.user !== undefined) {
+        await promptToConnect(runtime, client, {
+          teamId: turn.teamId,
+          channel: event.channel,
+          user: event.user,
+          threadTs,
+          direct: false,
+        })
+        return
+      }
 
       await say({
         text: 'Sorry, I hit an error answering that.',
@@ -143,7 +246,7 @@ export function registerHandlers({ app, getTools }: Runtime): void {
     }
 
     const threadTs = event.thread_ts
-    const turn = turnFromContext(client, context)
+    const turn = turnFromContext(client, context, event.user)
 
     logger.withTag('slack').info(`DM from ${event.user} in ${event.channel}`)
 
@@ -190,7 +293,7 @@ export function registerHandlers({ app, getTools }: Runtime): void {
 
       const { text, toolOutputs } = await answer(
         messages,
-        await getTools(turn.teamId)
+        await getTools(turn.teamId, event.user)
       )
       const formatted = formatForSlack(text)
 
@@ -203,7 +306,7 @@ export function registerHandlers({ app, getTools }: Runtime): void {
       const posted = await say({
         text: formatted.message,
         thread_ts: threadTs,
-        metadata: buildTurnMetadata(toolOutputs),
+        metadata: buildTurnMetadata(toolOutputs, event.user),
       })
       logger
         .withTag('slack')
@@ -254,6 +357,15 @@ export function registerHandlers({ app, getTools }: Runtime): void {
         }
       }
 
+      await deliverVideos(runtime, client, {
+        teamId: turn.teamId,
+        channel: event.channel,
+        user: event.user,
+        threadTs,
+        answer: text,
+        toolOutputs,
+      })
+
       logger.withTag('slack').success(`Replied in DM ${event.channel}`)
     } catch (error) {
       await client.reactions
@@ -263,6 +375,17 @@ export function registerHandlers({ app, getTools }: Runtime): void {
           name: 'eyes',
         })
         .catch(() => {})
+
+      if (error instanceof NotConnectedError) {
+        await promptToConnect(runtime, client, {
+          teamId: turn.teamId,
+          channel: event.channel,
+          user: event.user,
+          threadTs,
+          direct: true,
+        })
+        return
+      }
 
       await say({
         text: 'Sorry, I hit an error answering that.',
