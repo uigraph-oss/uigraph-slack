@@ -35,11 +35,12 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@slack/bolt": "^4.7.3",
+    "@chat-adapter/slack": "^4.45.0",
+    "@chat-adapter/state-memory": "^4.45.0",
     "@uigraph/ai-sdk": "^1.0.3",
     "ai": "^7.0.22",
+    "chat": "^4.45.0",
     "consola": "^3.4.2",
-    "slackify-markdown": "^5.0.0",
     "zod": "^4.4.3"
   }
 }

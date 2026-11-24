@@ -5,10 +5,10 @@
     "declaration": true,
     "outDir": "dist",
     "jsx": "react-jsx",
-    "jsxImportSource": "react",
+    "jsxImportSource": "chat",
     "strict": true,
     "noEmit": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": { "@/*": ["./src/*"] }

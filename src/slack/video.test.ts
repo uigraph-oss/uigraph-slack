@@ -4,6 +4,7 @@ import {
   parseShowVideo,
   uploadWhenRendered,
   watchUrl,
+  type RenderedVideo,
   type ShownVideo,
 } from './video'
 
@@ -28,32 +29,51 @@ describe('watchUrl and parseShowVideo', () => {
     )
   })
 
-  it('is ready only once the reply carries the file address', () => {
+  it('is ready only once the reply carries the MP4 resource link', () => {
     expect(
       parseShowVideo({
-        structuredContent: { src: 'https://mcp/x', title: 'T' },
+        content: [
+          { type: 'text', text: 'Download it' },
+          {
+            type: 'resource_link',
+            uri: 'https://mcp/x',
+            name: 'how-checkout-works.mp4',
+            description: 'How checkout works',
+            mimeType: 'video/mp4',
+          },
+        ],
       })
-    ).toEqual({ status: 'ready', title: 'T', src: 'https://mcp/x' })
-    expect(parseShowVideo({})).toEqual({ status: 'pending' })
-    expect(parseShowVideo({ structuredContent: { src: '' } })).toEqual({
-      status: 'pending',
+    ).toEqual({
+      status: 'ready',
+      title: 'How checkout works',
+      filename: 'how-checkout-works.mp4',
+      src: 'https://mcp/x',
     })
+    expect(
+      parseShowVideo({
+        content: [{ type: 'text', text: "The video file isn't ready yet" }],
+      })
+    ).toEqual({ status: 'pending' })
+  })
+
+  it('fails when show_video reports an error', () => {
+    expect(() =>
+      parseShowVideo({
+        isError: true,
+        content: [{ type: 'text', text: 'not found' }],
+      })
+    ).toThrow('show_video failed')
   })
 })
 
 describe('uploadWhenRendered', () => {
   function setup(sequence: ShownVideo[]) {
-    const uploads: unknown[] = []
+    const uploads: RenderedVideo[] = []
     let clock = 0
     const options = {
-      files: {
-        uploadV2: async (args: unknown) => {
-          uploads.push(args)
-          return {}
-        },
-      } as never,
-      channel: 'C1',
-      threadTs: '1.2',
+      deliver: async (video: RenderedVideo) => {
+        uploads.push(video)
+      },
       docId: ID,
       show: async () => sequence.shift() ?? { status: 'pending' as const },
       fetch: (async () => new Response('mp4-bytes')) as unknown as typeof fetch,
@@ -67,19 +87,24 @@ describe('uploadWhenRendered', () => {
     return { options, uploads }
   }
 
-  it('waits for the render, then uploads the file into the thread', async () => {
+  it('waits for the render, then delivers the downloaded file', async () => {
     const { options, uploads } = setup([
       { status: 'pending' },
       { status: 'pending' },
-      { status: 'ready', title: 'How checkout works', src: 'https://mcp/v' },
+      {
+        status: 'ready',
+        title: 'How checkout works',
+        filename: 'how-checkout-works.mp4',
+        src: 'https://mcp/v',
+      },
     ])
     expect(await uploadWhenRendered(options)).toBe('uploaded')
     expect(uploads).toHaveLength(1)
     expect(uploads[0]).toMatchObject({
-      channel_id: 'C1',
-      thread_ts: '1.2',
-      filename: 'How-checkout-works.mp4',
+      title: 'How checkout works',
+      filename: 'how-checkout-works.mp4',
     })
+    expect(uploads[0].data.toString()).toBe('mp4-bytes')
   })
 
   it('gives up quietly when the render never finishes', async () => {
@@ -90,7 +115,7 @@ describe('uploadWhenRendered', () => {
 
   it('does not throw when the download or upload fails', async () => {
     const { options } = setup([
-      { status: 'ready', title: 'T', src: 'https://mcp/v' },
+      { status: 'ready', title: 'T', filename: 't.mp4', src: 'https://mcp/v' },
     ])
     expect(
       await uploadWhenRendered({

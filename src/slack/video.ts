@@ -1,7 +1,8 @@
-import type { webApi } from '@slack/bolt'
+import type { McpClient } from '@uigraph/ai-sdk'
+import { z } from 'zod'
 
-// A video made from Slack is delivered in two steps: the watch link goes out at once, and once
-// the MP4 is rendered it is uploaded into the thread so it plays inline.
+// A video is delivered into the thread as an MP4 file so it plays inline. When it is still
+// rendering, the bot waits for the render and posts the file once it is ready.
 
 const DOC_ID = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
 
@@ -25,35 +26,61 @@ export function watchUrl(frontendUrl: string, docId: string): string {
 }
 
 export type ShownVideo =
-  { status: 'ready'; title: string; src: string } | { status: 'pending' }
+  | { status: 'ready'; title: string; filename: string; src: string }
+  | { status: 'pending' }
 
-// Asks the MCP server for the rendered file, as show_video does for Claude. Ready once the reply
-// carries the file's address; before that the server says it is still being made.
-export type ShowVideo = (docId: string) => Promise<ShownVideo>
+const showVideoResult = z.object({
+  isError: z.boolean().optional(),
+  content: z.array(
+    z.looseObject({
+      type: z.string(),
+      uri: z.string().optional(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      mimeType: z.string().optional(),
+    })
+  ),
+})
 
-export function parseShowVideo(result: {
-  structuredContent?: unknown
-}): ShownVideo {
-  const content = result.structuredContent as
-    { src?: unknown; title?: unknown } | undefined
-  if (content && typeof content.src === 'string' && content.src !== '') {
+// show_video names the rendered MP4 in a resource link. Before the render is done it only says so
+// in text, without a link.
+export function parseShowVideo(reply: unknown): ShownVideo {
+  const result = showVideoResult.parse(reply)
+  if (result.isError === true) {
+    throw new Error(`show_video failed: ${JSON.stringify(result.content)}`)
+  }
+  for (const part of result.content) {
+    if (part.type !== 'resource_link' || part.mimeType !== 'video/mp4') {
+      continue
+    }
+    if (part.uri === undefined || part.name === undefined) {
+      throw new Error('show_video returned a video link without its address')
+    }
     return {
       status: 'ready',
-      title: typeof content.title === 'string' ? content.title : 'video',
-      src: content.src,
+      title: part.description ?? part.name,
+      filename: part.name,
+      src: part.uri,
     }
   }
   return { status: 'pending' }
 }
 
-type Upload = Pick<webApi.WebClient['files'], 'uploadV2'>
+export async function showVideo(
+  client: McpClient,
+  docId: string
+): Promise<ShownVideo> {
+  return parseShowVideo(
+    await client.callTool({ name: 'show_video', arguments: { doc_id: docId } })
+  )
+}
+
+export type RenderedVideo = { title: string; filename: string; data: Buffer }
 
 export type FollowUp = {
-  files: Upload
-  channel: string
-  threadTs: string | undefined
   docId: string
-  show: ShowVideo
+  show: (docId: string) => Promise<ShownVideo>
+  deliver: (video: RenderedVideo) => Promise<void>
   fetch?: typeof fetch
   sleep?: (ms: number) => Promise<void>
   now?: () => number
@@ -62,12 +89,8 @@ export type FollowUp = {
   log?: (message: string) => void
 }
 
-function safeName(title: string): string {
-  return `${title.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'video'}.mp4`
-}
-
-// Waits for the render and uploads the MP4 into the thread. Returns what happened; it never
-// throws, because the watch link has already been posted and is the fallback.
+// Waits for the render, downloads the MP4 and hands it to deliver. Returns what happened; it never
+// throws, so a caller running it in the background can report the outcome instead.
 export async function uploadWhenRendered(
   options: FollowUp
 ): Promise<'uploaded' | 'timeout' | 'failed'> {
@@ -86,13 +109,11 @@ export async function uploadWhenRendered(
           options.log?.(`Video download failed: status ${response.status}`)
           return 'failed'
         }
-        await options.files.uploadV2({
-          channel_id: options.channel,
-          ...(options.threadTs ? { thread_ts: options.threadTs } : {}),
-          file: Buffer.from(await response.arrayBuffer()),
-          filename: safeName(shown.title),
+        await options.deliver({
           title: shown.title,
-        } as Parameters<Upload['uploadV2']>[0])
+          filename: shown.filename,
+          data: Buffer.from(await response.arrayBuffer()),
+        })
         return 'uploaded'
       }
       if (now() + pollMs > deadline) return 'timeout'

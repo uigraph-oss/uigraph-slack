@@ -2,7 +2,6 @@ import { requireMode } from '@/env'
 import { logger } from '@/logger'
 import { connectMcp, type McpConnection } from '@/mcp/client'
 import type { Runtime } from '@/runtime'
-import { App } from '@slack/bolt'
 
 const MCP_CONNECT_ATTEMPTS = 10
 
@@ -40,15 +39,13 @@ export async function createSocketRuntime(): Promise<Runtime> {
       `Loaded ${Object.keys(connection.tools).length} tools: ${Object.keys(connection.tools).join(', ')}`
     )
 
-  const app = new App({
-    token: env.SLACK_BOT_TOKEN,
-    appToken: env.SLACK_APP_TOKEN,
-    socketMode: true,
-  })
-
   return {
-    app,
-    getTools: async () => connection.tools,
+    slack: {
+      mode: 'socket',
+      botToken: env.SLACK_BOT_TOKEN,
+      appToken: env.SLACK_APP_TOKEN,
+    },
+    connection: async () => connection,
     close: async () => {
       logger.withTag('mcp').info('Closing MCP client')
       await connection.client.close()
