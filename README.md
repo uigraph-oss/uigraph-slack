@@ -37,39 +37,59 @@ UIGRAPH_ENTERPRISE=true pnpm dev
 
 The app listens on `PORT` (default `3000`) with Bolt's default receiver, i.e. `POST /slack/events`.
 
+#### Answering as each person (optional)
+
+By default HTTP mode answers with one service account per workspace, so everyone in Slack sees the same data. Set `UIGRAPH_OAUTH_CLIENT_ID` to answer as the person who asked instead:
+
+- The first time someone mentions the app, it sends them a private link to connect their UIGraph account. They sign in to UIGraph and approve; after that the app uses that person's own access (their role, in the organization the workspace is installed for) and nothing is answered for someone who has not connected.
+- The app offers only tools that read or add. Tools that change or delete are left out, because other people's channel text can steer a turn.
+- When a turn creates a video, the watch link is posted first. Once the MP4 is rendered it is uploaded into the thread. Rendering needs a render worker on the UIGraph side; without one only the link is posted.
+- To set it up, register this app as an OAuth client of your uigraph-api (`POST /oauth/register`) with the redirect URI `<SLACK_APP_PUBLIC_URL>/uigraph/callback`, and set the variables below. Each Slack user connects once; a person can remove the approval under Connected applications in UIGraph.
+
 ## Environment variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `UIGRAPH_ENTERPRISE` | `false` | `true` selects HTTP mode; otherwise Socket mode |
-| `SLACK_BOT_DEBUG_MODE` | `false` | Verbose Slack/logging output |
-| `UIGRAPH_API_URL` | — | Base URL of uigraph-api (required) |
-| `UIGRAPH_MCP_URL` | — | Base URL of the MCP server (required) |
-| `AI_PROVIDER_NPM` | `@ai-sdk/openai-compatible` | AI SDK provider package |
-| `AI_PROVIDER_API_URL` | — | Provider API base URL |
-| `AI_PROVIDER_API_KEY` | — | Provider API key (required) |
-| `AI_PROVIDER_MODEL` | — | Model id to use (required) |
-| `AI_PROVIDER_OPTIONS` | — | Extra provider options, as a JSON object string |
-| `LLM_MAX_STEP` | `100` | Max tool-call steps per turn |
-| `LLM_MESSAGES_LIMIT` | `25` | Max thread messages sent as context |
-| `LLM_ATTACHMENT_IMAGE` | `false` | Allow image attachments as model input |
-| `LLM_ATTACHMENT_AUDIO` | `false` | Allow audio attachments as model input |
-| `LLM_ATTACHMENT_VIDEO` | `false` | Allow video attachments as model input |
+| Variable               | Default                     | Description                                     |
+| ---------------------- | --------------------------- | ----------------------------------------------- |
+| `UIGRAPH_ENTERPRISE`   | `false`                     | `true` selects HTTP mode; otherwise Socket mode |
+| `SLACK_BOT_DEBUG_MODE` | `false`                     | Verbose Slack/logging output                    |
+| `UIGRAPH_API_URL`      | —                           | Base URL of uigraph-api (required)              |
+| `UIGRAPH_MCP_URL`      | —                           | Base URL of the MCP server (required)           |
+| `AI_PROVIDER_NPM`      | `@ai-sdk/openai-compatible` | AI SDK provider package                         |
+| `AI_PROVIDER_API_URL`  | —                           | Provider API base URL                           |
+| `AI_PROVIDER_API_KEY`  | —                           | Provider API key (required)                     |
+| `AI_PROVIDER_MODEL`    | —                           | Model id to use (required)                      |
+| `AI_PROVIDER_OPTIONS`  | —                           | Extra provider options, as a JSON object string |
+| `LLM_MAX_STEP`         | `100`                       | Max tool-call steps per turn                    |
+| `LLM_MESSAGES_LIMIT`   | `25`                        | Max thread messages sent as context             |
+| `LLM_ATTACHMENT_IMAGE` | `false`                     | Allow image attachments as model input          |
+| `LLM_ATTACHMENT_AUDIO` | `false`                     | Allow audio attachments as model input          |
+| `LLM_ATTACHMENT_VIDEO` | `false`                     | Allow video attachments as model input          |
 
 Socket mode only:
 
-| Variable | Description |
-|---|---|
-| `SLACK_BOT_TOKEN` | Bot token (`xoxb-...`) from your Slack app |
-| `SLACK_APP_TOKEN` | App-level token (`xapp-...`) with `connections:write` |
-| `UIGRAPH_TOKEN` | Service-account token used to connect to the MCP server |
+| Variable          | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| `SLACK_BOT_TOKEN` | Bot token (`xoxb-...`) from your Slack app              |
+| `SLACK_APP_TOKEN` | App-level token (`xapp-...`) with `connections:write`   |
+| `UIGRAPH_TOKEN`   | Service-account token used to connect to the MCP server |
 
 HTTP mode only:
 
-| Variable | Description |
-|---|---|
-| `SLACK_SIGNING_SECRET` | Signing secret from your Slack app, used to verify requests |
+| Variable                            | Description                                                        |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `SLACK_SIGNING_SECRET`              | Signing secret from your Slack app, used to verify requests        |
 | `UIGRAPH_ENTERPRISE_INTERNAL_TOKEN` | Internal token for reading per-team installations from uigraph-api |
+
+HTTP mode, answering as each person (all required once `UIGRAPH_OAUTH_CLIENT_ID` is set):
+
+| Variable                      | Description                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `UIGRAPH_OAUTH_CLIENT_ID`     | The OAuth client id registered for this app. Setting it turns the mode on             |
+| `SLACK_APP_PUBLIC_URL`        | This app's public address; `/uigraph/connect` and `/uigraph/callback` are served here |
+| `UIGRAPH_MCP_PUBLIC_URL`      | The MCP server's public address, which each approval is bound to                      |
+| `UIGRAPH_FRONTEND_URL`        | Where people open UIGraph, used for watch links and the consent page                  |
+| `UIGRAPH_OAUTH_AUTHORIZE_URL` | Optional. The consent page, when it is not `UIGRAPH_FRONTEND_URL` + `/oauth/consent`  |
+| `SLACK_APP_STATE_SECRET`      | Optional, 16+ characters. Seals the connect link; defaults to `SLACK_SIGNING_SECRET`  |
 
 ## Testing
 
@@ -89,4 +109,3 @@ This project is licensed under the [Business Source License 1.1](LICENSE) (BUSL-
 - **Future open source** — each version automatically converts to [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) four years after it is first published under BUSL.
 
 BUSL is not an OSI-approved open source license during the initial term. For commercial licensing questions, open an issue or contact the maintainers.
-

@@ -30,7 +30,7 @@ export async function buildMessages(
     const isBot = message.bot_id !== undefined || message.user === botUserId
 
     if (isBot) {
-      const toolOutputs = readToolOutputs(message)
+      const toolOutputs = readToolOutputs(message, turn.askerId)
       if (toolOutputs !== undefined) {
         const content: AssistantContent = []
         if (text !== '') {

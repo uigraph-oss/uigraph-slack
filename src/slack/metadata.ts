@@ -1,4 +1,5 @@
 import { logger } from '@/logger'
+import { outputsForAsker } from '@/slack/asker'
 import type { SlackMessage } from '@/types'
 import type { webApi } from '@slack/bolt'
 import { inspect } from 'node:util'
@@ -12,7 +13,8 @@ const TRUNCATION_MARKER = '\n\n[truncated]'
 type PostMetadata = NonNullable<webApi.ChatPostMessageArguments['metadata']>
 
 export function buildTurnMetadata(
-  toolOutputs: string[]
+  toolOutputs: string[],
+  askerId?: string
 ): PostMetadata | undefined {
   if (toolOutputs.length === 0) {
     return undefined
@@ -21,7 +23,7 @@ export function buildTurnMetadata(
   function serializedSize(outputs: string[]): number {
     return JSON.stringify({
       event_type: AGENT_TURN_EVENT_TYPE,
-      event_payload: { toolOutputs: outputs },
+      event_payload: { toolOutputs: outputs, askerId },
     }).length
   }
 
@@ -60,7 +62,7 @@ export function buildTurnMetadata(
 
   const metadata = {
     event_type: AGENT_TURN_EVENT_TYPE,
-    event_payload: { toolOutputs: kept },
+    event_payload: { toolOutputs: kept, askerId },
   }
   const size = JSON.stringify(metadata).length
   logger
@@ -71,7 +73,10 @@ export function buildTurnMetadata(
   return metadata as unknown as PostMetadata
 }
 
-export function readToolOutputs(message: SlackMessage): string[] | undefined {
+export function readToolOutputs(
+  message: SlackMessage,
+  askerId?: string
+): string[] | undefined {
   const metadata = message.metadata
   logger
     .withTag('slack')
@@ -83,8 +88,8 @@ export function readToolOutputs(message: SlackMessage): string[] | undefined {
     return undefined
   }
 
-  const toolOutputs = metadata.event_payload?.toolOutputs
-  if (!Array.isArray(toolOutputs)) {
+  const toolOutputs = outputsForAsker(metadata.event_payload ?? {}, askerId)
+  if (toolOutputs === undefined) {
     return undefined
   }
 
@@ -93,5 +98,5 @@ export function readToolOutputs(message: SlackMessage): string[] | undefined {
     .verbose(
       `Restored ${toolOutputs.length} tool output(s) from turn metadata: ${inspect(toolOutputs, { depth: null })}`
     )
-  return toolOutputs as string[]
+  return toolOutputs
 }
