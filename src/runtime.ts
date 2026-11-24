@@ -1,20 +1,21 @@
-import type { ShownVideo } from '@/slack/video'
-import type { App } from '@slack/bolt'
-import type { ToolSet } from 'ai'
+import type { McpConnection } from '@/mcp/client'
+import type { SlackAdapterConfig } from '@chat-adapter/slack'
 
 export type Runtime = {
-  app: App
-  // The tools for one turn. When answers are per user, slackUserId picks whose access they use,
-  // and a user who has not connected a UIGraph account gets a NotConnectedError.
-  getTools(teamId: string | undefined, slackUserId?: string): Promise<ToolSet>
-  // Set when answers are per user: the link that connects a Slack user to UIGraph, what a
-  // finished video looks like, and where people open UIGraph.
+  // How the Slack adapter connects: one workspace over Socket Mode, or many over HTTP.
+  slack: SlackAdapterConfig
+  // The MCP connection for one turn. teamId is the Slack workspace the event came from (unset in
+  // socket mode). When answers are per user, slackUserId picks whose access is used, and a user
+  // who has not connected a UIGraph account gets a NotConnectedError.
+  connection(
+    teamId: string | undefined,
+    slackUserId: string
+  ): Promise<McpConnection>
+  // Set when answers are per user: the link that connects a Slack user to UIGraph.
   connectUrl?(teamId: string, slackUserId: string): string
-  showVideo?(
-    teamId: string,
-    slackUserId: string,
-    docId: string
-  ): Promise<ShownVideo>
-  frontendUrl?: string
+  // Set in HTTP mode: drops a workspace that removed the app.
+  forgetTeam?(teamId: string): Promise<void>
+  // Set in HTTP mode: the pages served next to Slack's events, such as /healthz.
+  page?(request: Request): Promise<Response>
   close(): Promise<void>
 }

@@ -2,9 +2,13 @@ import { z } from 'zod'
 
 const sharedSchema = z.object({
   SLACK_BOT_DEBUG_MODE: z.stringbool().default(false),
+  // Turn on when the Slack app has the agent experience (agent_view) enabled in its manifest.
+  SLACK_AGENT_VIEW: z.stringbool().default(false),
 
   UIGRAPH_API_URL: z.url(),
   UIGRAPH_MCP_URL: z.url(),
+  // Where people open UIGraph, for "Watch in UIGraph" buttons. Without it the buttons are left out.
+  UIGRAPH_FRONTEND_URL: z.url().optional(),
 
   AI_PROVIDER_NPM: z.string().default('@ai-sdk/openai-compatible'),
   AI_PROVIDER_OPTIONS: z
@@ -19,6 +23,9 @@ const sharedSchema = z.object({
 
   LLM_MAX_STEP: z.coerce.number().default(100),
   LLM_MESSAGES_LIMIT: z.coerce.number().default(25),
+  // Once a thread's conversation passes this many tokens, tool results from before the latest
+  // turn are cleared from it.
+  LLM_CONTEXT_TOKENS: z.coerce.number().default(100000),
 
   LLM_ATTACHMENT_IMAGE: z.stringbool().default(false),
   LLM_ATTACHMENT_AUDIO: z.stringbool().default(false),
@@ -29,6 +36,8 @@ const socketSchema = sharedSchema.extend({
   SLACK_BOT_TOKEN: z.string(),
   SLACK_APP_TOKEN: z.string(),
   UIGRAPH_TOKEN: z.string(),
+  // Optional here: with it the bot keeps its state in UIGraph instead of in memory.
+  UIGRAPH_ENTERPRISE_INTERNAL_TOKEN: z.string().optional(),
 })
 
 // Per-user connection (optional). Set UIGRAPH_OAUTH_CLIENT_ID to turn it on: each Slack user then

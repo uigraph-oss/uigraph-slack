@@ -2,7 +2,6 @@ import { requireMode } from '@/env'
 import { logger } from '@/logger'
 import { connectMcp, connectMcpAsUser, type McpConnection } from '@/mcp/client'
 import type { Runtime } from '@/runtime'
-import { parseShowVideo } from '@/slack/video'
 import {
   connectLink,
   handleCallback,
@@ -17,7 +16,6 @@ import {
 } from '@/uigraph/installations'
 import type { OAuthConfig } from '@/uigraph/oauth'
 import { createLinkStore, createUserTokens } from '@/uigraph/user-links'
-import { App, ExpressReceiver } from '@slack/bolt'
 
 async function connectTeam(teamId: string): Promise<McpConnection> {
   const installation = await getInstallation(teamId)
@@ -59,11 +57,7 @@ export async function createHttpRuntime(): Promise<Runtime> {
     }
   }
 
-  async function forgetTeam(teamId: string | undefined): Promise<void> {
-    if (teamId === undefined) {
-      logger.withTag('slack').warn('Uninstall event without team id')
-      return
-    }
+  async function forgetTeam(teamId: string): Promise<void> {
     logger.withTag('slack').info(`App removed from team ${teamId}`)
     evictInstallation(teamId)
     await closeTeam(teamId)
@@ -76,59 +70,47 @@ export async function createHttpRuntime(): Promise<Runtime> {
     }
   }
 
-  const receiver = new ExpressReceiver({
-    signingSecret: env.SLACK_SIGNING_SECRET,
-  })
-  receiver.router.get('/healthz', (_req, res) => {
-    res.status(200).send('ok')
-  })
-
-  const perUser = env.userOAuth
-    ? createPerUser(env, receiver.router)
-    : undefined
-
-  const app = new App({
-    receiver,
-    authorize: async ({ teamId }) => {
-      if (teamId === undefined) {
-        throw new Error('Slack event without team id is not supported')
-      }
-      const installation = await getInstallation(teamId)
-      if (installation === undefined) {
-        throw new Error(`Slack team ${teamId} is not connected to UiGraph`)
-      }
-      return {
-        botToken: installation.botToken,
-        botUserId: installation.botUserId,
-        teamId: installation.teamId,
-      }
-    },
-  })
-
-  app.event('app_uninstalled', async ({ context }) => {
-    await forgetTeam(context.teamId)
-  })
-
-  app.event('tokens_revoked', async ({ event, context }) => {
-    if ((event.tokens.bot ?? []).length === 0) {
-      return
-    }
-    await forgetTeam(context.teamId)
-  })
+  const perUser = env.userOAuth ? createPerUser(env) : undefined
 
   return {
-    app,
-    ...(perUser && {
-      connectUrl: perUser.connectUrl,
-      showVideo: perUser.showVideo,
-      frontendUrl: perUser.frontendUrl,
-    }),
-    getTools: async (teamId, slackUserId) => {
+    slack: {
+      mode: 'webhook',
+      signingSecret: env.SLACK_SIGNING_SECRET,
+      installationProvider: {
+        getInstallation: async (teamId) => {
+          const installation = await getInstallation(teamId)
+          if (installation === undefined) {
+            logger
+              .withTag('slack')
+              .warn(`Slack team ${teamId} is not connected to UiGraph`)
+            return null
+          }
+          return {
+            botToken: installation.botToken,
+            botUserId: installation.botUserId,
+          }
+        },
+      },
+    },
+    ...(perUser && { connectUrl: perUser.connectUrl }),
+    forgetTeam,
+    page: async (request) => {
+      const url = new URL(request.url)
+      if (request.method === 'GET' && url.pathname === '/healthz') {
+        return new Response('ok')
+      }
+      if (perUser && request.method === 'GET') {
+        const response = await perUser.page(url)
+        if (response !== undefined) return response
+      }
+      return new Response('Not found', { status: 404 })
+    },
+    connection: async (teamId, slackUserId) => {
+      if (teamId === undefined) {
+        throw new Error('Slack team id is required in HTTP mode')
+      }
       if (perUser) {
-        if (teamId === undefined || slackUserId === undefined) {
-          throw new Error('Slack team and user ids are required')
-        }
-        return (await perUser.connectionFor(teamId, slackUserId)).tools
+        return perUser.connectionFor(teamId, slackUserId)
       }
       if (teamId === undefined) {
         throw new Error('Slack team id is required in HTTP mode')
@@ -141,8 +123,7 @@ export async function createHttpRuntime(): Promise<Runtime> {
           teamConnections.delete(teamId)
         })
       }
-      const connection = await pending
-      return connection.tools
+      return pending
     },
     close: async () => {
       for (const teamId of [...teamConnections.keys()]) {
@@ -155,28 +136,34 @@ export async function createHttpRuntime(): Promise<Runtime> {
 
 type HttpEnv = ReturnType<typeof requireMode<'http'>>
 
-// The part of Express's response this file uses; Express itself comes with Bolt.
-type PageResponse = {
-  set(name: string, value: string): unknown
-  redirect(status: number, url: string): unknown
-  status(code: number): { type(type: string): { send(body: string): unknown } }
+function toResponse(result: PageResult): Response {
+  const headers = new Headers({
+    'Cache-Control': 'no-store',
+    // The callback address carries the approval code, so it must not leak as a referrer.
+    'Referrer-Policy': 'no-referrer',
+  })
+  if ('redirect' in result) {
+    headers.set('Location', result.redirect)
+    return new Response(null, { status: 302, headers })
+  }
+  headers.set('Content-Type', 'text/html; charset=utf-8')
+  return new Response(result.html, { status: result.status, headers })
 }
 
-function send(res: PageResponse, result: PageResult): void {
-  res.set('Cache-Control', 'no-store')
-  // The callback address carries the approval code, so it must not leak as a referrer.
-  res.set('Referrer-Policy', 'no-referrer')
-  if (result.status === 302 && 'redirect' in result) {
-    res.redirect(302, result.redirect)
-    return
-  }
-  if ('html' in result) {
-    res.status(result.status).type('html').send(result.html)
+async function pageOrError(
+  label: string,
+  work: () => Promise<PageResult>
+): Promise<Response> {
+  try {
+    return toResponse(await work())
+  } catch (error) {
+    logger.withTag('uigraph').error(`${label} failed`, error)
+    return new Response('Something went wrong. Try again.', { status: 502 })
   }
 }
 
 // Answers as the Slack user who asked, with the access of their own UIGraph account.
-function createPerUser(env: HttpEnv, router: ExpressReceiver['router']) {
+function createPerUser(env: HttpEnv) {
   const userOAuth = env.userOAuth
   if (!userOAuth) {
     throw new Error('Per-user connection is not configured')
@@ -204,33 +191,24 @@ function createPerUser(env: HttpEnv, router: ExpressReceiver['router']) {
     installationOrg: async (teamId) => (await getInstallation(teamId))?.orgId,
   }
 
-  router.get('/uigraph/connect', (req, res) => {
-    const invite =
-      typeof req.query.invite === 'string' ? req.query.invite : undefined
-    handleConnect(connectDeps, invite).then(
-      (result) => send(res, result),
-      (error: unknown) => {
-        logger.withTag('uigraph').error('Connect failed', error)
-        res.status(502).type('text').send('Something went wrong. Try again.')
-      }
-    )
-  })
-  router.get('/uigraph/callback', (req, res) => {
-    function text(value: unknown): string | undefined {
-      return typeof value === 'string' ? value : undefined
+  async function page(url: URL): Promise<Response | undefined> {
+    const query = url.searchParams
+    if (url.pathname === '/uigraph/connect') {
+      return pageOrError('Connect', () =>
+        handleConnect(connectDeps, query.get('invite') ?? undefined)
+      )
     }
-    handleCallback(connectDeps, {
-      code: text(req.query.code),
-      state: text(req.query.state),
-      error: text(req.query.error),
-    }).then(
-      (result) => send(res, result),
-      (error: unknown) => {
-        logger.withTag('uigraph').error('Callback failed', error)
-        res.status(502).type('text').send('Something went wrong. Try again.')
-      }
-    )
-  })
+    if (url.pathname === '/uigraph/callback') {
+      return pageOrError('Callback', () =>
+        handleCallback(connectDeps, {
+          code: query.get('code') ?? undefined,
+          state: query.get('state') ?? undefined,
+          error: query.get('error') ?? undefined,
+        })
+      )
+    }
+    return undefined
+  }
 
   // One MCP connection per Slack user. It is made with the user's current access token, so a
   // refreshed token means a new connection; the old one is closed a little later, once any
@@ -274,17 +252,9 @@ function createPerUser(env: HttpEnv, router: ExpressReceiver['router']) {
 
   return {
     connectionFor,
+    page,
     connectUrl: (teamId: string, slackUserId: string) =>
       connectLink(connectDeps, teamId, slackUserId),
-    showVideo: async (teamId: string, slackUserId: string, docId: string) => {
-      const connection = await connectionFor(teamId, slackUserId)
-      const result = await connection.client.callTool({
-        name: 'show_video',
-        arguments: { doc_id: docId },
-      })
-      return parseShowVideo(result as { structuredContent?: unknown })
-    },
-    frontendUrl: userOAuth.UIGRAPH_FRONTEND_URL,
     close: async () => {
       for (const { pending } of connections.values()) {
         await pending.then((c) => c.client.close()).catch(() => {})
