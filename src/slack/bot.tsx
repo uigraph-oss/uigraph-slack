@@ -82,11 +82,47 @@ function mcpText(output: unknown): string[] {
 }
 
 // Turns tool calls into the live step list above the answer, and keeps the UIGraph tool results.
+// Text the model writes before a data tool call ("Let me check…") is held back and dropped, so
+// only the answer is posted. A paragraph break, a display tool or the end of the step releases it.
 async function* withTasks(
   parts: AsyncIterable<TextStreamPart<ToolSet>>,
-  turn: TurnDisplay
+  turn: TurnDisplay,
+  dataTools: Set<string>
 ) {
+  type TextDelta = Extract<TextStreamPart<ToolSet>, { type: 'text-delta' }>
+  let held: TextDelta[] = []
+  let heldText = ''
+  let answering = false
   for await (const part of parts) {
+    if (part.type === 'start-step') answering = false
+    if (part.type === 'text-delta' && !answering) {
+      held.push(part)
+      heldText += part.text
+      if (!heldText.includes('\n\n')) continue
+      answering = true
+      yield* held
+      held = []
+      heldText = ''
+      continue
+    }
+    if (
+      (part.type === 'tool-input-start' || part.type === 'tool-call') &&
+      held.length > 0
+    ) {
+      if (dataTools.has(part.toolName)) {
+        log.debug(`Dropped text before ${part.toolName}: ${heldText}`)
+      } else {
+        answering = true
+        yield* held
+      }
+      held = []
+      heldText = ''
+    }
+    if (part.type === 'finish-step' && held.length > 0) {
+      yield* held
+      held = []
+      heldText = ''
+    }
     if (part.type === 'tool-call') {
       log.debug(
         `Tool ${part.toolName} input: ${inspect(part.input, { depth: null })}`
@@ -321,9 +357,12 @@ export function createBot(runtime: Runtime) {
       onStep: (step) => steps.push(step),
     })
     await thread.post(
-      new StreamingPlan(withTasks(stream, turn), {
-        groupTasks: 'plan',
-      })
+      new StreamingPlan(
+        withTasks(stream, turn, new Set(Object.keys(connection.tools))),
+        {
+          groupTasks: 'plan',
+        }
+      )
     )
     // A turn cut short by a newer message is not saved; the next turn reads its question again.
     if (thread.signal.aborted) return
