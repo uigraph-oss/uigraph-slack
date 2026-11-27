@@ -125,7 +125,13 @@ export function refreshTokens(
   )
 }
 
-export type Identity = { userId: string; orgId: string; resource: string }
+export type Identity = {
+  userId: string
+  orgId: string
+  resource: string
+  // Display name, when the API gives one.
+  name?: string
+}
 
 // Who the token belongs to, as the API sees it. The callback uses this to make sure the grant is
 // for the organization the workspace is installed for.
@@ -144,9 +150,36 @@ export async function whoAmI(
     userId?: string
     orgId?: string
     resource?: string
+    name?: string
   }
   if (!me.userId || !me.orgId) {
     throw new Error('UIGraph identity response is missing the user or org')
   }
-  return { userId: me.userId, orgId: me.orgId, resource: me.resource ?? '' }
+  return {
+    userId: me.userId,
+    orgId: me.orgId,
+    resource: me.resource ?? '',
+    name: me.name || undefined,
+  }
+}
+
+// The name of the token's organization, for display only. Undefined when it can't be read.
+export async function orgName(
+  config: OAuthConfig,
+  accessToken: string,
+  orgId: string,
+  fetchImpl: Fetch = fetch
+): Promise<string | undefined> {
+  try {
+    const response = await fetchImpl(`${config.apiUrl}/api/v1/auth/orgs`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!response.ok) return undefined
+    const body = (await response.json()) as {
+      orgs?: Array<{ id?: string; name?: string }>
+    }
+    return body.orgs?.find((org) => org.id === orgId)?.name || undefined
+  } catch {
+    return undefined
+  }
 }
