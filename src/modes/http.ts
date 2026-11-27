@@ -136,6 +136,35 @@ export async function createHttpRuntime(): Promise<Runtime> {
 
 type HttpEnv = ReturnType<typeof requireMode<'http'>>
 
+// Opens the bot's DM with one Slack user and posts text there, with the installation's bot token.
+async function dmSlackUser(
+  botToken: string,
+  slackUserId: string,
+  text: string
+): Promise<void> {
+  async function call(method: string, body: Record<string, string>) {
+    const response = await fetch(`https://slack.com/api/${method}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify(body),
+    })
+    const out = (await response.json()) as {
+      ok?: boolean
+      error?: string
+      channel?: { id?: string }
+    }
+    if (!out.ok) throw new Error(`Slack ${method}: ${out.error ?? 'failed'}`)
+    return out
+  }
+  const opened = await call('conversations.open', { users: slackUserId })
+  const channel = opened.channel?.id
+  if (!channel) throw new Error('Slack conversations.open returned no channel')
+  await call('chat.postMessage', { channel, text })
+}
+
 function toResponse(result: PageResult): Response {
   const headers = new Headers({
     'Cache-Control': 'no-store',
@@ -189,6 +218,16 @@ function createPerUser(env: HttpEnv) {
     secret: userOAuth.SLACK_APP_STATE_SECRET ?? env.SLACK_SIGNING_SECRET,
     links,
     installationOrg: async (teamId) => (await getInstallation(teamId))?.orgId,
+    botUserId: async (teamId) => (await getInstallation(teamId))?.botUserId,
+    notifyConnected: async (teamId, slackUserId, text) => {
+      const installation = await getInstallation(teamId)
+      if (installation === undefined) return
+      try {
+        await dmSlackUser(installation.botToken, slackUserId, text)
+      } catch (error) {
+        logger.withTag('uigraph').warn('Connected notice failed', error)
+      }
+    },
   }
 
   async function page(url: URL): Promise<Response | undefined> {

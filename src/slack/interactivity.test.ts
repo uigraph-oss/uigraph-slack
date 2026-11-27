@@ -188,3 +188,19 @@ describe('isAutopilotInteraction', () => {
     ).toBe(false)
   })
 })
+
+describe('Autopilot action ids', () => {
+  it.each([
+    'autopilot_verdict_right',
+    'autopilot_verdict_wrong',
+    'autopilot_check_now',
+    'autopilot_not_for_autopilot',
+    'autopilot_mute',
+  ])('passes %s through to the API', (actionId) => {
+    expect(isAutopilotInteraction(formBody(actionId))).toBe(true)
+  })
+
+  it('keeps look-alikes with the bot', () => {
+    expect(isAutopilotInteraction(formBody('ask_autopilot_mute'))).toBe(false)
+  })
+})

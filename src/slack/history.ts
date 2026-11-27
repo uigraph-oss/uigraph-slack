@@ -61,6 +61,18 @@ function isBot(message: Message) {
   return message.author.isMe || message.author.isBot === true
 }
 
+// A top-level DM has no thread: with the agent view off (the default) the adapter gives it an empty
+// thread ts, and conversations.replies with ts="" answers thread_not_found. Its conversation is the
+// DM's own recent messages, so those are read instead. Thread ids are "slack:CHANNEL:THREAD_TS".
+export function fetchRecent(thread: Thread<ThreadState>, limit: number) {
+  const [, channel = '', threadTs = ''] = thread.id.split(':')
+  const fetchChannel = thread.adapter.fetchChannelMessages
+  if (threadTs === '' && channel !== '' && fetchChannel !== undefined) {
+    return fetchChannel.call(thread.adapter, `slack:${channel}`, { limit })
+  }
+  return thread.adapter.fetchMessages(thread.id, { limit })
+}
+
 // The first turn starts from the thread's recent messages, bot replies included. Later turns add
 // the people's messages posted since the last saved one; the bot's replies are already saved.
 // Slack message ids are timestamps of one fixed width, so they compare as text.
@@ -70,9 +82,7 @@ export async function buildTurn(
   saved: SessionMessage[],
   extra: ExtraInput | undefined
 ): Promise<Turn> {
-  const fetched = await thread.adapter.fetchMessages(thread.id, {
-    limit: env.LLM_MESSAGES_LIMIT,
-  })
+  const fetched = await fetchRecent(thread, env.LLM_MESSAGES_LIMIT)
   const lastSaved = saved
     .filter((message) => message.slackMessageId !== undefined)
     .at(-1)?.slackMessageId
