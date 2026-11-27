@@ -4,6 +4,7 @@ import { createHttpRuntime } from '@/modes/http'
 import { createSocketRuntime } from '@/modes/socket'
 import type { Runtime } from '@/runtime'
 import { createBot } from '@/slack/bot'
+import { routeSlackRequest } from '@/slack/interactivity'
 import { createServer, type IncomingMessage } from 'node:http'
 import { Readable } from 'node:stream'
 
@@ -46,6 +47,12 @@ void (async () => {
     )
   }
 
+  const interactionLog = logger.withTag('interactivity')
+  function logInteraction(message: string, error?: unknown) {
+    if (error === undefined) interactionLog.warn(message)
+    else interactionLog.warn(message, error)
+  }
+
   const page = runtime.page
   const server =
     page === undefined
@@ -56,7 +63,12 @@ void (async () => {
               const request = toRequest(req)
               const response =
                 new URL(request.url).pathname === '/slack/events'
-                  ? await bot.webhooks.slack(request, { waitUntil })
+                  ? await routeSlackRequest(request, {
+                      apiUrl: env.UIGRAPH_API_URL,
+                      log: logInteraction,
+                      handle: (slackRequest) =>
+                        bot.webhooks.slack(slackRequest, { waitUntil }),
+                    })
                   : await page(request)
               res.writeHead(
                 response.status,

@@ -3,6 +3,7 @@ import { env } from '@/env'
 import { logger } from '@/logger'
 import type { McpConnection } from '@/mcp/client'
 import type { Runtime } from '@/runtime'
+import { guardAutopilotTools } from '@/slack/autopilot'
 import {
   ASK_ACTION_IDS,
   asCard,
@@ -43,6 +44,7 @@ import {
   StreamingPlan,
   Table,
   TextInput,
+  type Message,
   type PostableMessage,
   type StreamChunk,
   type Thread,
@@ -59,6 +61,8 @@ class WorkspaceSlackAdapter extends SlackAdapter {
 
 type Request = {
   askerId: string
+  // What the asker said, for answering it again in their DM when it turns out to be private.
+  question?: string
   extra?: ExtraInput
 }
 
@@ -183,6 +187,17 @@ function videoMessage(video: RenderedVideo, docId: string): PostableMessage {
       { data: video.data, filename: video.filename, mimeType: 'video/mp4' },
     ],
   }
+}
+
+// A person's message as the model sees it in the thread, for asking it again in their DM.
+function authoredText(message: Message): string | undefined {
+  const text = message.text.trim()
+  if (text === '') return undefined
+  return `<author>${message.author.fullName} <${message.author.userId}></author>\n\n${text}`
+}
+
+function withoutAuthor(text: string): string {
+  return text.replace(/^<author>.*?<\/author>\s*/s, '')
 }
 
 function inBackground(label: string, work: () => Promise<void>) {
@@ -344,11 +359,14 @@ export function createBot(runtime: Runtime) {
 
     const turn: TurnDisplay = { posts: [], videos: [], toolOutputs: [] }
     const steps: StepResult<ToolSet>[] = []
+    let answerPrivately = false
     const stream = await answer({
       history: input.history,
       input: input.input.map((message) => message.content),
       tools: {
-        ...connection.tools,
+        ...guardAutopilotTools(connection.tools, thread.isDM, () => {
+          answerPrivately = true
+        }),
         ...displayTools(turn),
         ...outlineTool(thread, turn),
       },
@@ -380,6 +398,37 @@ export function createBot(runtime: Runtime) {
       await deliverVideo(thread, teamId, request.askerId, connection, docId)
     }
     log.success(`Replied in thread ${thread.id}`)
+    if (answerPrivately) await respondInDM(thread, request)
+  }
+
+  // Answers an Autopilot question from a shared thread in the asker's DM, where the Autopilot
+  // tools run for real. The thread itself only got the neutral pointer.
+  async function respondInDM(thread: Thread<ThreadState>, request: Request) {
+    const question = request.question?.trim() || request.extra?.text
+    if (question === undefined || question === '') {
+      log.warn(`No question to answer privately from thread ${thread.id}`)
+      return
+    }
+    let dm: Thread<ThreadState>
+    try {
+      dm = await bot.openDM(request.askerId)
+    } catch (error) {
+      log.error(`Could not open a DM with ${request.askerId}`, error)
+      await thread.postEphemeral(
+        request.askerId,
+        'I could not send you a DM. Ask me there directly and I will answer.',
+        { fallbackToDM: false }
+      )
+      return
+    }
+    log.info(`Answering ${request.askerId} privately from thread ${thread.id}`)
+    const note = await dm.post({
+      markdown: `You asked in a channel:\n> ${withoutAuthor(question).replaceAll('\n', '\n> ')}`,
+    })
+    await respondSafely(dm, {
+      askerId: request.askerId,
+      extra: { text: question, slackMessageId: note.id },
+    })
   }
 
   async function respondSafely(thread: Thread<ThreadState>, request: Request) {
@@ -398,7 +447,10 @@ export function createBot(runtime: Runtime) {
   bot.onNewMention(async (thread, message) => {
     log.info(`Mention from ${message.author.userId} in ${thread.channelId}`)
     await thread.subscribe()
-    await respondSafely(thread, { askerId: message.author.userId })
+    await respondSafely(thread, {
+      askerId: message.author.userId,
+      question: authoredText(message),
+    })
   })
 
   // A followed thread is answered without a mention while one person talks to the bot. Once
@@ -411,7 +463,10 @@ export function createBot(runtime: Runtime) {
       }
     }
     log.info(`Follow-up from ${message.author.userId} in ${thread.id}`)
-    await respondSafely(thread, { askerId: message.author.userId })
+    await respondSafely(thread, {
+      askerId: message.author.userId,
+      question: authoredText(message),
+    })
   })
 
   bot.onDirectMessage(async (thread, message) => {
